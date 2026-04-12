@@ -10,9 +10,11 @@ import CAConnectModal from "@/components/CAConnectModal";
 import { TaxResult, IncomeHead, LineItem, ProvisionCard as ProvisionCardType, Assumption, Flag, DeductionItem, SlabRow, TDSReconciliationRow, CarryForwardLoss, UnclassifiedCredit } from "@/types/tax";
 import { getMockResult } from "@/lib/mockResult";
 
-const formatINR = (n: number) => {
-  if (n < 0) return `(₹${Math.abs(n).toLocaleString("en-IN")})`;
-  return `₹${n.toLocaleString("en-IN")}`;
+const formatINR = (n: number | undefined | null) => {
+  if (n === undefined || n === null || isNaN(Number(n))) return "₹0";
+  const num = Number(n);
+  if (num < 0) return `(₹${Math.abs(num).toLocaleString("en-IN")})`;
+  return `₹${num.toLocaleString("en-IN")}`;
 };
 
 const Result = () => {
