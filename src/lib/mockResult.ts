@@ -1,0 +1,327 @@
+import { TaxResult } from "@/types/tax";
+
+export const getMockResult = (): TaxResult => ({
+  assesseeDetails: {
+    name: "Rajesh Kumar",
+    pan: "ABCPK1234F",
+    assessmentYear: "AY 2026-27",
+    governingLaw: "Income Tax Act 1961 (Finance Act 2025)",
+    residency: "Resident — Ordinary Resident",
+    ageCategory: "Below 60 years",
+    aiConfidence: "HIGH",
+    confidenceExplanation: "All key documents provided. Only 1 assumption needed.",
+    documentStatuses: [
+      { name: "Form 16 Part B", status: "extracted", note: "Key data extracted" },
+      { name: "HDFC Bank Statement", status: "extracted", note: "634 transactions analysed" },
+      { name: "Capital Gains Statement", status: "partial", note: "1 holding needs manual FMV" },
+      { name: "AIS", status: "not_uploaded", note: "TDS reconciliation is limited" },
+    ],
+  },
+  assumptions: [
+    {
+      category: "DATA_GAP",
+      item: "LTCG on HDFC Bank Ltd. shares",
+      description: "Fair Market Value (FMV) as on 31 January 2018 was not found. Using actual purchase price of ₹840/share instead.",
+      impact: "If FMV was higher than ₹840, your LTCG is overstated and you're paying more tax than needed.",
+      howToFix: "Check HDFC Bank share price on 31.01.2018 at bseindia.com and add instruction.",
+    },
+    {
+      category: "INSTRUCTION_DERIVED",
+      item: "UPI credits classified as freelancing income",
+      description: "You typed 'treat all UPI credits as freelancing income.' Applied to 18 transactions totalling ₹2,40,000.",
+      impact: "2 credits (₹12,000 JIOREFUND + ₹8,000 SELFXFER) look like refund/transfer but included as instructed.",
+    },
+    {
+      category: "LEGAL_POSITION",
+      item: "Section 87A Rebate on STCG tax",
+      description: "Whether rebate applies against special-rate taxes is disputed. Conservative position taken: rebate NOT applied.",
+      impact: "₹18,400 more tax under conservative position.",
+    },
+  ],
+  agriculturalIncome: {
+    amount: 180000,
+    explanation: "This income is fully EXEMPT from tax under Section 10(1). However, it is included in the calculation ONLY to determine the tax rate on your other income (Partial Integration Method).",
+    partialIntegrationSteps: [
+      "Step 1: Compute tax on (total income + agricultural income) = tax on ₹14,86,600 + ₹1,80,000 = ₹16,66,600",
+      "Step 2: Compute tax on (basic exemption + agricultural income) = tax on ₹2,50,000 + ₹1,80,000 = ₹4,30,000",
+      "Step 3: Your actual tax = Step 1 minus Step 2. This ensures agricultural income only pushes your other income into a higher slab.",
+    ],
+  },
+  incomeHeads: [
+    {
+      type: "SALARY",
+      name: "Income from Salaries",
+      sectionRef: "Sections 15, 16, 17",
+      oldRegimeTotal: 1086000,
+      newRegimeTotal: 1176000,
+      lineItems: [
+        { name: "Basic Salary", source: "Form 16 Part B", section: "Sec 17(1)", oldRegimeAmount: 1040000, newRegimeAmount: 1040000, provision: {
+          lineItem: "Basic Salary", section: "Section 17(1)", source: "Form 16 Part B (uploaded)",
+          legalText: "'Salary' includes wages, any annuity or pension, any gratuity, any fees, commissions, perquisites or profits in lieu of or in addition to any salary or wages.",
+          calculation: ["Basic Salary per Form 16: ₹10,40,000 per annum", "This is fully taxable under both regimes"],
+          plainEnglish: "Your basic salary of ₹10,40,000 is fully taxable. This is the foundation of your salary income and there are no exemptions on basic salary under either regime.",
+          oldRegimeAmount: 1040000, newRegimeAmount: 1040000,
+        }},
+        { name: "HRA Received", source: "Form 16", section: "Sec 17(1)", oldRegimeAmount: 300000, newRegimeAmount: 300000 },
+        { name: "Less: HRA Exemption", source: "Form 16 + Instruction", section: "Sec 10(13A) r/w Rule 2A", oldRegimeAmount: -290000, newRegimeAmount: 0, provision: {
+          lineItem: "HRA Exemption", section: "Section 10(13A) read with Rule 2A", source: "Form 16 Part B + Your instruction about ₹35,000/month rent in Pune",
+          legalText: "Any special allowance granted to an assessee by his employer to meet expenditure actually incurred on payment of rent in respect of residential accommodation occupied by the assessee is exempt to the extent of the least of: (a) actual HRA received, (b) 50% of salary if residing in Mumbai, Kolkata, Delhi, or Chennai — 40% elsewhere, (c) actual rent paid minus 10% of salary.",
+          calculation: [
+            "Actual HRA received from employer: ₹3,00,000",
+            "40% of your salary (Pune = non-metro): ₹5,20,000",
+            "Rent paid (₹35,000 × 12): ₹4,20,000",
+            "Minus 10% of salary: -₹1,30,000",
+            "Result: ₹2,90,000",
+            "Least of the three: ₹2,90,000 ← HRA Exemption",
+          ],
+          plainEnglish: "The law gives you HRA exemption equal to the smallest of three numbers. In your case, the difference between your rent and 10% of your salary (₹2,90,000) turned out to be the smallest. This means ₹2,90,000 of your HRA is not taxed. Under the New Regime, HRA exemption is NOT available — the full ₹3,00,000 is taxable.",
+          oldRegimeAmount: -290000, newRegimeAmount: 0, oldRegimeLabel: "Exempt ₹2,90,000", newRegimeLabel: "Fully Taxable ₹3,00,000",
+        }},
+        { name: "Special Allowance", source: "Form 16", section: "Sec 17(1)", oldRegimeAmount: 96000, newRegimeAmount: 96000 },
+        { name: "Less: Standard Deduction", source: "Automatic", section: "Sec 16(ia)", oldRegimeAmount: -50000, newRegimeAmount: -75000, provision: {
+          lineItem: "Standard Deduction", section: "Section 16(ia)", source: "Automatic — applied by law",
+          legalText: "A deduction of ₹50,000 (Old Regime) or ₹75,000 (New Regime) from income chargeable under the head 'Salaries'.",
+          calculation: ["Old Regime: Flat ₹50,000 deduction", "New Regime: Flat ₹75,000 deduction (enhanced by Finance Act 2024)"],
+          plainEnglish: "Every salaried person gets this automatic deduction — no receipts needed. The New Regime gives you ₹25,000 more than the Old Regime here.",
+          oldRegimeAmount: -50000, newRegimeAmount: -75000,
+        }},
+        { name: "Less: Professional Tax", source: "Form 16", section: "Sec 16(iii)", oldRegimeAmount: -10000, newRegimeAmount: 0 },
+      ],
+    },
+    {
+      type: "HOUSE_PROPERTY",
+      name: "Income from House Property",
+      sectionRef: "Sections 22–27",
+      oldRegimeTotal: -130000,
+      newRegimeTotal: 0,
+      lineItems: [
+        { name: "Self-Occupied Property — GAV", source: "Your instruction", section: "Sec 23(2)", oldRegimeAmount: 0, newRegimeAmount: 0 },
+        { name: "Less: Interest on Home Loan", source: "Loan certificate", section: "Sec 24(b)", oldRegimeAmount: -130000, newRegimeAmount: 0, provision: {
+          lineItem: "Home Loan Interest Deduction", section: "Section 24(b)", source: "Home Loan Interest Certificate (uploaded)",
+          legalText: "Where the property has been acquired, constructed, repaired, renewed or reconstructed with borrowed capital, the amount of any interest payable on such capital shall be deducted. For self-occupied property, the deduction is limited to ₹2,00,000.",
+          calculation: ["Total interest paid during the year: ₹1,30,000", "Self-occupied property limit: ₹2,00,000", "Deduction allowed: ₹1,30,000 (within limit)"],
+          plainEnglish: "You paid ₹1,30,000 as home loan interest. Since your property is self-occupied, you can deduct up to ₹2 lakh of interest under Old Regime. Under New Regime, this deduction is NOT available for self-occupied properties.",
+          oldRegimeAmount: -130000, newRegimeAmount: 0, oldRegimeLabel: "Deduction ₹1,30,000", newRegimeLabel: "NOT available",
+        }},
+      ],
+    },
+    {
+      type: "PGBP",
+      name: "Profits & Gains from Business or Profession",
+      sectionRef: "Sections 28–44",
+      oldRegimeTotal: 120000,
+      newRegimeTotal: 120000,
+      lineItems: [
+        { name: "Freelance Income (Presumptive — 44ADA)", source: "Bank statement + instruction", section: "Sec 44ADA", oldRegimeAmount: 120000, newRegimeAmount: 120000, provision: {
+          lineItem: "Presumptive Taxation", section: "Section 44ADA", source: "Bank statement UPI credits + your instruction",
+          legalText: "A sum equal to fifty per cent of the total gross receipts of the assessee in the previous year on account of such profession shall be deemed to be the profits and gains of such profession.",
+          calculation: [
+            "Gross professional receipts (18 UPI credits): ₹2,40,000",
+            "Deemed Profit (50% of ₹2,40,000): ₹1,20,000",
+            "This is your taxable PGBP income.",
+          ],
+          plainEnglish: "Under Section 44ADA, the law assumes 50% of your professional receipts is profit. You don't need to show expenses. So out of ₹2,40,000, only ₹1,20,000 is taxable.",
+          oldRegimeAmount: 120000, newRegimeAmount: 120000,
+        }},
+      ],
+    },
+    {
+      type: "CAPITAL_GAINS",
+      name: "Capital Gains",
+      sectionRef: "Sections 45–55A",
+      oldRegimeTotal: 45200,
+      newRegimeTotal: 45200,
+      lineItems: [
+        { name: "STCG on Listed Equity", source: "Capital gains statement", section: "Sec 111A @20%", oldRegimeAmount: 28200, newRegimeAmount: 28200, provision: {
+          lineItem: "Short-Term Capital Gains", section: "Section 111A", source: "Capital gains statement (uploaded)",
+          legalText: "Tax on short-term capital gains in certain cases. Where the total income of an assessee includes short-term capital gains arising from transfer of equity share or unit where STT has been paid, tax at 20% shall be charged.",
+          calculation: [
+            "Infosys Ltd: Bought Mar 2025, Sold Sep 2025 → Gain ₹18,400",
+            "HDFC Equity Fund: Bought Jan 2025, Sold Aug 2025 → Gain ₹9,800",
+            "Total STCG: ₹28,200 → Tax @20% = ₹5,640",
+          ],
+          plainEnglish: "Your short-term equity gains (held less than 12 months) are taxed at a flat 20% rate — not your slab rate. This rate is the same under both regimes.",
+          oldRegimeAmount: 28200, newRegimeAmount: 28200,
+        }},
+        { name: "LTCG on Listed Equity (above ₹1.25L exempt)", source: "Capital gains statement", section: "Sec 112A @12.5%", oldRegimeAmount: 17000, newRegimeAmount: 17000, provision: {
+          lineItem: "Long-Term Capital Gains", section: "Section 112A", source: "Capital gains statement (uploaded)",
+          legalText: "Tax at 12.5% on long-term capital gains exceeding ₹1,25,000 arising from transfer of equity share or equity-oriented fund where STT has been paid.",
+          calculation: [
+            "Total LTCG: ₹1,42,000",
+            "Less: Exemption (first ₹1,25,000 tax-free): (₹1,25,000)",
+            "Taxable LTCG: ₹17,000",
+            "Tax @12.5% = ₹2,125",
+          ],
+          plainEnglish: "Your first ₹1,25,000 of long-term equity gains is completely tax-free every year. Only the remaining ₹17,000 is taxed at 12.5%.",
+          oldRegimeAmount: 17000, newRegimeAmount: 17000,
+        }},
+      ],
+    },
+    {
+      type: "OTHER_SOURCES",
+      name: "Income from Other Sources",
+      sectionRef: "Sections 56–59",
+      oldRegimeTotal: 26200,
+      newRegimeTotal: 26200,
+      lineItems: [
+        { name: "Savings Bank Interest", source: "HDFC Bank statement", section: "Sec 56", oldRegimeAmount: 4200, newRegimeAmount: 4200 },
+        { name: "Fixed Deposit Interest", source: "Interest certificate", section: "Sec 56", oldRegimeAmount: 18400, newRegimeAmount: 18400 },
+        { name: "Dividend Income", source: "AIS (reported by company)", section: "Sec 56(2)(i)", oldRegimeAmount: 3600, newRegimeAmount: 3600 },
+      ],
+    },
+  ],
+  grossTotalIncome: { oldRegime: 1147400, newRegime: 1367400 },
+  deductions: {
+    oldRegime: [
+      {
+        section: "Section 80C", name: "Savings & Investments", amount: 150000, limit: 150000,
+        breakdown: [
+          { label: "LIC premium", amount: 48000 },
+          { label: "PPF contribution", amount: 50000 },
+          { label: "ELSS mutual fund", amount: 24000 },
+          { label: "Home loan principal", amount: 28000 },
+        ],
+        law: "Section 80C | Limit: ₹1,50,000/year (combined)",
+        plainEnglish: "You can deduct up to ₹1.5 lakh of investments in PPF, LIC, ELSS, home loan principal, etc. You've reached the full limit.",
+      },
+      {
+        section: "Section 80D", name: "Health Insurance", amount: 42000, limit: 50000,
+        breakdown: [
+          { label: "Self + family premium", amount: 18000 },
+          { label: "Parents' premium", amount: 24000 },
+        ],
+        law: "Section 80D | Limit: ₹25,000 self + ₹25,000 parents",
+        plainEnglish: "Health insurance premiums for yourself and your parents get deducted separately.",
+      },
+      {
+        section: "Section 80TTA", name: "Savings Account Interest", amount: 4200, limit: 10000,
+        law: "Section 80TTA | Limit: Up to ₹10,000 per year",
+        plainEnglish: "Interest earned in your savings bank account is deductible up to ₹10,000.",
+      },
+    ],
+    newRegime: [],
+    totalOld: 196200,
+    totalNew: 0,
+    lostInNewRegime: 196200,
+  },
+  taxableIncome: { oldRegime: 951200, newRegime: 1367400 },
+  taxComputation: {
+    oldRegime: {
+      slabs: [
+        { range: "Up to ₹2,50,000", rate: "0%", incomeInSlab: 250000, tax: 0 },
+        { range: "₹2,50,001 to ₹5,00,000", rate: "5%", incomeInSlab: 250000, tax: 12500 },
+        { range: "₹5,00,001 to ₹9,51,200", rate: "20%", incomeInSlab: 451200, tax: 90240 },
+      ],
+      specialRateIncomes: [
+        { type: "STCG (Sec 111A)", amount: 28200, rate: "20%", tax: 5640, section: "111A" },
+        { type: "LTCG above ₹1.25L (Sec 112A)", amount: 17000, rate: "12.5%", tax: 2125, section: "112A" },
+      ],
+      taxOnSlabIncome: 102740,
+      taxOnSpecialRate: 7765,
+      totalTaxBeforeSurcharge: 110505,
+      surcharge: 0,
+      surchargeRate: "0% (below ₹50L)",
+      cess: 4420,
+      grossTaxLiability: 114925,
+      section87ARebate: 0,
+      section87AEligible: false,
+      netTaxLiability: 114925,
+      tdsCredits: [
+        { source: "TDS by employer (Form 16)", amount: 82400 },
+        { source: "TDS on FD interest", amount: 1840 },
+      ],
+      advanceTaxPaid: 0,
+      netPayableOrRefund: 30685,
+    },
+    newRegime: {
+      slabs: [
+        { range: "Up to ₹4,00,000", rate: "0%", incomeInSlab: 400000, tax: 0 },
+        { range: "₹4,00,001 to ₹8,00,000", rate: "5%", incomeInSlab: 400000, tax: 20000 },
+        { range: "₹8,00,001 to ₹12,00,000", rate: "10%", incomeInSlab: 400000, tax: 40000 },
+        { range: "₹12,00,001 to ₹13,67,400", rate: "15%", incomeInSlab: 167400, tax: 25110 },
+      ],
+      specialRateIncomes: [
+        { type: "STCG (Sec 111A)", amount: 28200, rate: "20%", tax: 5640, section: "111A" },
+        { type: "LTCG above ₹1.25L (Sec 112A)", amount: 17000, rate: "12.5%", tax: 2125, section: "112A" },
+      ],
+      taxOnSlabIncome: 85110,
+      taxOnSpecialRate: 7765,
+      totalTaxBeforeSurcharge: 92875,
+      surcharge: 0,
+      surchargeRate: "0% (below ₹50L)",
+      cess: 3715,
+      grossTaxLiability: 96590,
+      section87ARebate: 0,
+      section87AEligible: false,
+      netTaxLiability: 96590,
+      tdsCredits: [
+        { source: "TDS by employer (Form 16)", amount: 82400 },
+        { source: "TDS on FD interest", amount: 1840 },
+      ],
+      advanceTaxPaid: 0,
+      netPayableOrRefund: 12350,
+    },
+  },
+  regimeDecision: {
+    winner: "NEW",
+    savings: 18335,
+    reasons: [
+      "Your deductions (₹1,96,200) are not large enough to overcome the lower New Regime tax rates.",
+      "Your income falls in ranges where New Regime's 5-15% slabs are much lower than Old Regime's 20% slab.",
+      "Even though you lose 80C and 80D deductions in New Regime, the slab rate advantage more than makes up for it.",
+    ],
+    whatWouldFlip: [
+      "If your deductions were above ₹3,80,000",
+      "If you have significant home loan interest above ₹2,00,000",
+      "If you pay health insurance for very senior parents (₹50,000 limit)",
+    ],
+    isCloseCall: false,
+  },
+  carryForwardLosses: [
+    {
+      type: "House Property Loss (excess after set-off)",
+      amount: 0,
+      rule: "Can set off ₹2L max vs other income. Remaining carries forward 8 years.",
+      section: "Section 71B",
+    },
+  ],
+  flags: [
+    {
+      type: "RED",
+      title: "TDS Mismatch Detected",
+      description: "TDS credited in your documents (₹84,240) could not be verified against AIS as it was not uploaded. If you claim this TDS in your return, verify it matches your Form 26AS.",
+    },
+    {
+      type: "GREEN",
+      title: "Unused 80D Limit",
+      description: "You have ₹8,000 unused under Section 80D (health insurance). Buying additional health coverage before March 31 could save you ₹1,600–₹2,400 in tax under Old Regime.",
+    },
+    {
+      type: "AMBER",
+      title: "FMV Assumption on LTCG",
+      description: "1 holding used assumed purchase cost (FMV on 31.01.2018 not found). This may overstate your taxable gain. Check the share price on BSE on 31 January 2018.",
+    },
+    {
+      type: "BLUE",
+      title: "Total TDS Credit",
+      description: "Your total TDS credit: ₹84,240. Ensure this matches your Form 26AS from the income tax portal.",
+    },
+  ],
+  tdsReconciliation: [
+    { source: "Employer TDS (Form 16 Part A)", tdsInDoc: 82400, tdsInAIS: null, match: null },
+    { source: "Bank FD Interest TDS @10%", tdsInDoc: 1840, tdsInAIS: null, match: null },
+  ],
+  unclassifiedCredits: [
+    { date: "14 September", description: "NEFT from VIJAY", amount: 45000 },
+    { date: "22 November", description: "SELF SBI TRF", amount: 28000 },
+  ],
+  advanceTaxNote: {
+    netPayable: 12350,
+    installments: [
+      { date: "15 June", percentage: "15%" },
+      { date: "15 September", percentage: "45%" },
+      { date: "15 December", percentage: "75%" },
+      { date: "15 March", percentage: "100%" },
+    ],
+  },
+});
