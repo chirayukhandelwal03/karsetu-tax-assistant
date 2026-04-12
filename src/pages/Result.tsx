@@ -36,11 +36,21 @@ const Result = () => {
 
   if (!result) return <div className="min-h-screen flex items-center justify-center"><p>Loading...</p></div>;
 
-  const { assesseeDetails: ad, regimeDecision: rd } = result;
+  const defaultComputation = {
+    slabs: [], specialRateIncomes: [], taxOnSlabIncome: 0, taxOnSpecialRate: 0,
+    totalTaxBeforeSurcharge: 0, surcharge: 0, surchargeRate: "0%", cess: 0,
+    grossTaxLiability: 0, section87ARebate: 0, section87AEligible: false,
+    netTaxLiability: 0, tdsCredits: [], advanceTaxPaid: 0, netPayableOrRefund: 0,
+  };
+  const ad = result.assesseeDetails || { name: "—", pan: "", assessmentYear: "AY 2026-27", governingLaw: "", residency: "", ageCategory: "", aiConfidence: "LOW", confidenceExplanation: "", documentStatuses: [] };
+  const rd = result.regimeDecision || { winner: "NEW" as const, savings: 0, reasons: [], whatWouldFlip: [], isCloseCall: false };
+  const tc = result.taxComputation || { oldRegime: defaultComputation, newRegime: defaultComputation };
+  const oldRegime = tc.oldRegime || defaultComputation;
+  const newRegime = tc.newRegime || defaultComputation;
   const winnerLabel = rd.winner === "NEW" ? "New Regime" : "Old Regime";
   const loserLabel = rd.winner === "NEW" ? "Old Regime" : "New Regime";
-  const winnerTax = rd.winner === "NEW" ? result.taxComputation.newRegime.netPayableOrRefund : result.taxComputation.oldRegime.netPayableOrRefund;
-  const loserTax = rd.winner === "NEW" ? result.taxComputation.oldRegime.netPayableOrRefund : result.taxComputation.newRegime.netPayableOrRefund;
+  const winnerTax = rd.winner === "NEW" ? newRegime.netPayableOrRefund : oldRegime.netPayableOrRefund;
+  const loserTax = rd.winner === "NEW" ? oldRegime.netPayableOrRefund : newRegime.netPayableOrRefund;
 
   const toggleHead = (type: string) => setExpandedHeads((p) => ({ ...p, [type]: !p[type] }));
   const toggleItem = (key: string) => setExpandedItems((p) => ({ ...p, [key]: !p[key] }));
