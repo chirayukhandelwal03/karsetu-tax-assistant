@@ -51,15 +51,15 @@ const Result = () => {
   const loserLabel = rd.winner === "NEW" ? "Old Regime" : "New Regime";
   const winnerTax = rd.winner === "NEW" ? newRegime.netPayableOrRefund : oldRegime.netPayableOrRefund;
   const loserTax = rd.winner === "NEW" ? oldRegime.netPayableOrRefund : newRegime.netPayableOrRefund;
-  const assumptions = result.assumptions || [];
-  const incomeHeads = result.incomeHeads || [];
-  const gti = result.grossTotalIncome || { oldRegime: 0, newRegime: 0 };
-  const deductions = result.deductions || { oldRegime: [], newRegime: [], totalOld: 0, totalNew: 0, lostInNewRegime: 0 };
-  const taxableIncome = result.taxableIncome || { oldRegime: 0, newRegime: 0 };
-  const carryForwardLosses = result.carryForwardLosses || [];
-  const flags = result.flags || [];
-  const tdsReconciliation = result.tdsReconciliation || [];
-  const unclassifiedCredits = result.unclassifiedCredits || [];
+  const assumptions = assumptions || [];
+  const incomeHeads = incomeHeads || [];
+  const gti = gti || { oldRegime: 0, newRegime: 0 };
+  const deductions = deductions || { oldRegime: [], newRegime: [], totalOld: 0, totalNew: 0, lostInNewRegime: 0 };
+  const taxableIncome = taxableIncome || { oldRegime: 0, newRegime: 0 };
+  const carryForwardLosses = carryForwardLosses || [];
+  const flags = flags || [];
+  const tdsReconciliation = tdsReconciliation || [];
+  const unclassifiedCredits = unclassifiedCredits || [];
 
   const toggleHead = (type: string) => setExpandedHeads((p) => ({ ...p, [type]: !p[type] }));
   const toggleItem = (key: string) => setExpandedItems((p) => ({ ...p, [key]: !p[key] }));
@@ -142,8 +142,8 @@ const Result = () => {
         </section>
 
         {/* 7.3 Assumptions Panel */}
-        <section className={`rounded-xl border p-6 ${result.assumptions.length > 0 ? "border-l-4 border-l-amber bg-white" : "border-l-4 border-l-green-light bg-green-pale"}`}>
-          {result.assumptions.length === 0 ? (
+        <section className={`rounded-xl border p-6 ${assumptions.length > 0 ? "border-l-4 border-l-amber bg-white" : "border-l-4 border-l-green-light bg-green-pale"}`}>
+          {assumptions.length === 0 ? (
             <div className="flex items-center gap-2">
               <CheckCircle className="text-green-light" size={20} />
               <span className="font-semibold text-ink">Zero Assumptions — All data fully resolved from your documents.</span>
@@ -152,11 +152,11 @@ const Result = () => {
             <>
               <button onClick={() => setShowAssumptions(!showAssumptions)} className="flex items-center gap-2 w-full text-left">
                 {showAssumptions ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                <span className="font-heading font-semibold text-ink">{result.assumptions.length} Assumptions Made</span>
+                <span className="font-heading font-semibold text-ink">{assumptions.length} Assumptions Made</span>
               </button>
               {showAssumptions && (
                 <div className="mt-4 space-y-3">
-                  {result.assumptions.map((a, i) => (
+                  {assumptions.map((a, i) => (
                     <AssumptionCard key={i} assumption={a} />
                   ))}
                 </div>
@@ -191,7 +191,7 @@ const Result = () => {
           </h2>
 
           <div className="space-y-3">
-            {result.incomeHeads.map((head) => (
+            {incomeHeads.map((head) => (
               <IncomeHeadAccordion
                 key={head.type}
                 head={head}
@@ -208,8 +208,8 @@ const Result = () => {
         <div className="bg-blue-deep text-white rounded-xl p-5 flex items-center justify-between">
           <span className="font-heading font-bold">GROSS TOTAL INCOME</span>
           <div className="flex gap-8 text-right">
-            <div><div className="text-xs opacity-70">Old Regime</div><div className="font-mono-num font-bold text-lg">{formatINR(result.grossTotalIncome.oldRegime)}</div></div>
-            <div><div className="text-xs opacity-70">New Regime</div><div className="font-mono-num font-bold text-lg">{formatINR(result.grossTotalIncome.newRegime)}</div></div>
+            <div><div className="text-xs opacity-70">Old Regime</div><div className="font-mono-num font-bold text-lg">{formatINR(gti.oldRegime)}</div></div>
+            <div><div className="text-xs opacity-70">New Regime</div><div className="font-mono-num font-bold text-lg">{formatINR(gti.newRegime)}</div></div>
           </div>
         </div>
 
@@ -222,25 +222,25 @@ const Result = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <h3 className="font-semibold text-ink text-sm mb-3 flex items-center gap-2">Old Regime Deductions</h3>
-              {result.deductions.oldRegime.map((d, i) => <DeductionCard key={i} item={d} />)}
+              {deductions.oldRegime.map((d, i) => <DeductionCard key={i} item={d} />)}
               <div className="mt-3 pt-3 border-t border-border flex justify-between font-semibold text-ink">
                 <span>TOTAL DEDUCTIONS</span>
-                <span className="font-mono-num">{formatINR(result.deductions.totalOld)}</span>
+                <span className="font-mono-num">{formatINR(deductions.totalOld)}</span>
               </div>
             </div>
             <div>
               <h3 className="font-semibold text-ink text-sm mb-3">New Regime Deductions</h3>
-              {result.deductions.newRegime.length === 0 ? (
+              {deductions.newRegime.length === 0 ? (
                 <p className="text-sm text-muted-text italic">Under New Regime, most deductions are NOT available.</p>
               ) : (
-                result.deductions.newRegime.map((d, i) => <DeductionCard key={i} item={d} />)
+                deductions.newRegime.map((d, i) => <DeductionCard key={i} item={d} />)
               )}
               <div className="mt-3 pt-3 border-t border-border flex justify-between font-semibold text-ink">
                 <span>TOTAL DEDUCTIONS</span>
-                <span className="font-mono-num">{formatINR(result.deductions.totalNew)}</span>
+                <span className="font-mono-num">{formatINR(deductions.totalNew)}</span>
               </div>
-              {result.deductions.lostInNewRegime > 0 && (
-                <p className="text-xs text-kred mt-2">Deductions you CANNOT claim in New Regime: {formatINR(result.deductions.lostInNewRegime)}</p>
+              {deductions.lostInNewRegime > 0 && (
+                <p className="text-xs text-kred mt-2">Deductions you CANNOT claim in New Regime: {formatINR(deductions.lostInNewRegime)}</p>
               )}
             </div>
           </div>
@@ -253,8 +253,8 @@ const Result = () => {
             <p className="text-xs text-white/60 mt-1">Rounded to nearest ₹10 as per Section 288A</p>
           </div>
           <div className="flex gap-8 text-right">
-            <div><div className="text-xs opacity-70">Old Regime</div><div className="font-mono-num font-bold text-lg">{formatINR(result.taxableIncome.oldRegime)}</div></div>
-            <div><div className="text-xs opacity-70">New Regime</div><div className="font-mono-num font-bold text-lg">{formatINR(result.taxableIncome.newRegime)}</div></div>
+            <div><div className="text-xs opacity-70">Old Regime</div><div className="font-mono-num font-bold text-lg">{formatINR(taxableIncome.oldRegime)}</div></div>
+            <div><div className="text-xs opacity-70">New Regime</div><div className="font-mono-num font-bold text-lg">{formatINR(taxableIncome.newRegime)}</div></div>
           </div>
         </div>
 
@@ -264,13 +264,13 @@ const Result = () => {
             title="OLD REGIME"
             subtitle="Income Tax Act 1961 — Finance Act 2025"
             computation={oldRegime}
-            taxableIncome={result.taxableIncome.oldRegime}
+            taxableIncome={taxableIncome.oldRegime}
           />
           <TaxSlabTable
             title="NEW REGIME"
             subtitle="Section 115BAC — Finance Act 2025"
             computation={newRegime}
-            taxableIncome={result.taxableIncome.newRegime}
+            taxableIncome={taxableIncome.newRegime}
           />
         </section>
 
@@ -299,11 +299,11 @@ const Result = () => {
         </section>
 
         {/* 7.10 Carry-Forward Losses */}
-        {result.carryForwardLosses.length > 0 && (
+        {carryForwardLosses.length > 0 && (
           <section className="bg-white rounded-xl border border-border p-6">
             <h2 className="font-heading font-bold text-lg text-ink mb-4">Losses — Carry Forward to Next Year</h2>
             <div className="space-y-3">
-              {result.carryForwardLosses.map((loss, i) => (
+              {carryForwardLosses.map((loss, i) => (
                 <div key={i} className="border border-border rounded-lg p-3">
                   <div className="font-semibold text-sm text-ink">{loss.type}</div>
                   <div className="font-mono-num text-ink text-sm">{formatINR(loss.amount)}</div>
@@ -316,11 +316,11 @@ const Result = () => {
         )}
 
         {/* 7.11 Flags & Recommendations */}
-        {result.flags.length > 0 && (
+        {flags.length > 0 && (
           <section>
             <h2 className="font-heading font-bold text-lg text-ink mb-4">Flags & Recommendations</h2>
             <div className="space-y-3">
-              {result.flags.map((flag, i) => (
+              {flags.map((flag, i) => (
                 <FlagCard key={i} flag={flag} />
               ))}
             </div>
@@ -341,7 +341,7 @@ const Result = () => {
                 </tr>
               </thead>
               <tbody>
-                {result.tdsReconciliation.map((row, i) => (
+                {tdsReconciliation.map((row, i) => (
                   <tr key={i} className="border-b border-border/50">
                     <td className="py-2 text-ink">{row.source}</td>
                     <td className="py-2 text-right font-mono-num">{formatINR(row.tdsInDoc)}</td>
@@ -355,12 +355,12 @@ const Result = () => {
         </section>
 
         {/* 7.13 Unclassified Credits */}
-        {result.unclassifiedCredits.length > 0 && (
+        {unclassifiedCredits.length > 0 && (
           <section className="bg-amber-pale rounded-xl border border-amber/20 p-6">
             <h2 className="font-heading font-semibold text-ink mb-3">A Few Transactions We Set Aside</h2>
             <p className="text-sm text-ink-soft mb-3">While reading your bank statements, we came across some credits whose purpose wasn't clear. We've left these OUT of your income computation for now:</p>
             <ul className="space-y-1 mb-4">
-              {result.unclassifiedCredits.map((c, i) => (
+              {unclassifiedCredits.map((c, i) => (
                 <li key={i} className="text-sm text-ink">• {formatINR(c.amount)} on {c.date} — "{c.description}"</li>
               ))}
             </ul>
