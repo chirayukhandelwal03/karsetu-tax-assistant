@@ -70,7 +70,7 @@ const Result = () => {
           <div className="flex items-center gap-6">
             <div className={`text-center ${rd.winner === "OLD" ? "" : "opacity-60"}`}>
               <div className="text-xs text-muted-text">Old Regime</div>
-              <div className="font-mono-num font-bold text-lg text-ink">{formatINR(result.taxComputation.oldRegime.netPayableOrRefund)}</div>
+              <div className="font-mono-num font-bold text-lg text-ink">{formatINR(oldRegime.netPayableOrRefund)}</div>
             </div>
             <div className="text-center">
               <div className="flex items-center gap-1 text-green-light font-semibold text-sm">
@@ -80,7 +80,7 @@ const Result = () => {
             </div>
             <div className={`text-center ${rd.winner === "NEW" ? "" : "opacity-60"}`}>
               <div className="text-xs text-muted-text">New Regime</div>
-              <div className="font-mono-num font-bold text-lg text-ink">{formatINR(result.taxComputation.newRegime.netPayableOrRefund)}</div>
+              <div className="font-mono-num font-bold text-lg text-ink">{formatINR(newRegime.netPayableOrRefund)}</div>
             </div>
           </div>
           <div className="flex gap-2">
@@ -254,13 +254,13 @@ const Result = () => {
           <TaxSlabTable
             title="OLD REGIME"
             subtitle="Income Tax Act 1961 — Finance Act 2025"
-            computation={result.taxComputation.oldRegime}
+            computation={oldRegime}
             taxableIncome={result.taxableIncome.oldRegime}
           />
           <TaxSlabTable
             title="NEW REGIME"
             subtitle="Section 115BAC — Finance Act 2025"
-            computation={result.taxComputation.newRegime}
+            computation={newRegime}
             taxableIncome={result.taxableIncome.newRegime}
           />
         </section>
