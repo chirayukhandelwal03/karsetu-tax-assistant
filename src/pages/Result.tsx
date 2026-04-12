@@ -51,6 +51,15 @@ const Result = () => {
   const loserLabel = rd.winner === "NEW" ? "Old Regime" : "New Regime";
   const winnerTax = rd.winner === "NEW" ? newRegime.netPayableOrRefund : oldRegime.netPayableOrRefund;
   const loserTax = rd.winner === "NEW" ? oldRegime.netPayableOrRefund : newRegime.netPayableOrRefund;
+  const assumptions = result.assumptions || [];
+  const incomeHeads = result.incomeHeads || [];
+  const gti = result.grossTotalIncome || { oldRegime: 0, newRegime: 0 };
+  const deductions = result.deductions || { oldRegime: [], newRegime: [], totalOld: 0, totalNew: 0, lostInNewRegime: 0 };
+  const taxableIncome = result.taxableIncome || { oldRegime: 0, newRegime: 0 };
+  const carryForwardLosses = result.carryForwardLosses || [];
+  const flags = result.flags || [];
+  const tdsReconciliation = result.tdsReconciliation || [];
+  const unclassifiedCredits = result.unclassifiedCredits || [];
 
   const toggleHead = (type: string) => setExpandedHeads((p) => ({ ...p, [type]: !p[type] }));
   const toggleItem = (key: string) => setExpandedItems((p) => ({ ...p, [key]: !p[key] }));
