@@ -134,8 +134,8 @@ Deno.serve(async (req: Request) => {
         let extractedText = "";
 
         const canUseAI = GOOGLE_AI_API_KEY && (mimeType.startsWith("image/") || mimeType === "application/pdf");
-        if (canUseAI) {
-        extractedText = await extractTextWithGemini(file.base64 || "", mimeType, file.name, GOOGLE_AI_API_KEY!);
+        if (canUseAI && GOOGLE_AI_API_KEY) {
+          extractedText = await extractTextWithGemini(file.base64 || "", mimeType, file.name, GOOGLE_AI_API_KEY);
         } else {
           extractedText = extractTextBasic(file.base64 || "", mimeType);
         }

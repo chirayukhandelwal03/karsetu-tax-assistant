@@ -234,11 +234,13 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    type ParsedDocument = { classifiedType: string; originalName: string; extractedText?: string };
+    const docs = (parsedDocuments as ParsedDocument[] | null) ?? [];
     const userMessage = `ASSESSEE SETUP:
 ${JSON.stringify(assesseeSetup, null, 2)}
 
-PARSED DOCUMENTS (${(parsedDocuments as Array<unknown>)?.length || 0} files):
-${(parsedDocuments as Array<{ classifiedType: string; originalName: string; extractedText?: string }>)?.map((d) => `[${d.classifiedType}] ${d.originalName}:\n${d.extractedText?.substring(0, 3000) || "No text extracted"}`).join("\n\n---\n\n") || "No documents uploaded."}
+PARSED DOCUMENTS (${docs.length} files):
+${docs.map((d) => `[${d.classifiedType}] ${d.originalName}:\n${d.extractedText?.substring(0, 3000) || "No text extracted"}`).join("\n\n---\n\n") || "No documents uploaded."}
 
 USER INSTRUCTIONS:
 ${userInstructions || "No special instructions provided."}
