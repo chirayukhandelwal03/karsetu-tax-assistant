@@ -1,8 +1,9 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
 const SYSTEM_PROMPT = `You are KarSetu.AI — India's most thorough and transparent AI-powered income tax computation engine, built specifically for Indian individual taxpayers.
@@ -37,45 +38,45 @@ Do not reference Income Tax Act 2025.
 TAX SLABS — AY 2026-27
 
 OLD REGIME (Individual, below 60):
-- Up to ₹2,50,000: 0%
-- ₹2,50,001 to ₹5,00,000: 5%
-- ₹5,00,001 to ₹10,00,000: 20%
-- Above ₹10,00,000: 30%
-- Section 87A rebate: ₹12,500 if total income ≤ ₹5,00,000
+- Up to Rs.2,50,000: 0%
+- Rs.2,50,001 to Rs.5,00,000: 5%
+- Rs.5,00,001 to Rs.10,00,000: 20%
+- Above Rs.10,00,000: 30%
+- Section 87A rebate: Rs.12,500 if total income <= Rs.5,00,000
 
 OLD REGIME (Senior Citizen, 60-79):
-- Up to ₹3,00,000: 0%
-- ₹3,00,001 to ₹5,00,000: 5%
-- ₹5,00,001 to ₹10,00,000: 20%
-- Above ₹10,00,000: 30%
+- Up to Rs.3,00,000: 0%
+- Rs.3,00,001 to Rs.5,00,000: 5%
+- Rs.5,00,001 to Rs.10,00,000: 20%
+- Above Rs.10,00,000: 30%
 
 OLD REGIME (Super Senior, 80+):
-- Up to ₹5,00,000: 0%
-- ₹5,00,001 to ₹10,00,000: 20%
-- Above ₹10,00,000: 30%
+- Up to Rs.5,00,000: 0%
+- Rs.5,00,001 to Rs.10,00,000: 20%
+- Above Rs.10,00,000: 30%
 
 NEW REGIME (Section 115BAC — all ages same):
-- Up to ₹4,00,000: 0%
-- ₹4,00,001 to ₹8,00,000: 5%
-- ₹8,00,001 to ₹12,00,000: 10%
-- ₹12,00,001 to ₹16,00,000: 15%
-- ₹16,00,001 to ₹20,00,000: 20%
-- ₹20,00,001 to ₹24,00,000: 25%
-- Above ₹24,00,000: 30%
-- Section 87A rebate: ₹60,000 if total income ≤ ₹12,00,000
-- Standard deduction for salaried: ₹75,000
+- Up to Rs.4,00,000: 0%
+- Rs.4,00,001 to Rs.8,00,000: 5%
+- Rs.8,00,001 to Rs.12,00,000: 10%
+- Rs.12,00,001 to Rs.16,00,000: 15%
+- Rs.16,00,001 to Rs.20,00,000: 20%
+- Rs.20,00,001 to Rs.24,00,000: 25%
+- Above Rs.24,00,000: 30%
+- Section 87A rebate: Rs.60,000 if total income <= Rs.12,00,000
+- Standard deduction for salaried: Rs.75,000
 
 SURCHARGE:
-- ₹50L to ₹1Cr: 10%
-- ₹1Cr to ₹2Cr: 15%
-- ₹2Cr to ₹5Cr: 25%
-- Above ₹5Cr: 37% (Old), 25% (New)
+- Rs.50L to Rs.1Cr: 10%
+- Rs.1Cr to Rs.2Cr: 15%
+- Rs.2Cr to Rs.5Cr: 25%
+- Above Rs.5Cr: 37% (Old), 25% (New)
 
 CESS: 4% on (tax + surcharge)
 
 SPECIAL RATE INCOMES:
 - STCG on listed equity (Sec 111A, STT paid): 20%
-- LTCG on listed equity above ₹1,25,000 (Sec 112A, STT paid): 12.5%
+- LTCG on listed equity above Rs.1,25,000 (Sec 112A, STT paid): 12.5%
 - FMV grandfathering for pre-31.01.2018 holdings
 - LTCG on other assets (Sec 112): 12.5% without indexation
 - VDA/Crypto (Sec 115BBH): 30% flat, NO set-off
@@ -85,14 +86,112 @@ SPECIAL RATE INCOMES:
 SECTION 87A REBATE — CONTESTED POSITION
 Show BOTH conservative (rebate NOT applied against special-rate taxes) and liberal positions.
 
-YOU MUST RESPOND WITH A VALID JSON OBJECT matching the TaxResult TypeScript interface. Include all income heads, line items with provision cards containing legal text, calculations, and plain English explanations. Compute both Old and New Regime fully.
+YOU MUST RESPOND WITH A VALID JSON OBJECT. Include all income heads, line items with provision cards containing legal text, calculations, and plain English explanations. Compute both Old and New Regime fully.
 
-For each line item provision card, include:
-- lineItem, section, source
-- legalText (the actual law text)
-- calculation (array of step-by-step strings)
-- plainEnglish (conversational explanation)
-- oldRegimeAmount, newRegimeAmount
+The JSON must match this TypeScript structure exactly:
+{
+  assesseeDetails: {
+    name: string,
+    pan: string,
+    assessmentYear: string,
+    governingLaw: string,
+    residency: string,
+    ageCategory: string,
+    aiConfidence: "HIGH" | "MEDIUM" | "LOW",
+    confidenceExplanation: string,
+    documentStatuses: Array<{ name: string, status: "extracted" | "partial" | "not_uploaded", note: string }>
+  },
+  assumptions: Array<{
+    category: "DATA_GAP" | "INSTRUCTION_DERIVED" | "LEGAL_POSITION",
+    item: string,
+    description: string,
+    impact: string,
+    howToFix?: string
+  }>,
+  agriculturalIncome?: {
+    amount: number,
+    explanation: string,
+    partialIntegrationSteps: string[]
+  },
+  incomeHeads: Array<{
+    type: "SALARY" | "HOUSE_PROPERTY" | "PGBP" | "CAPITAL_GAINS" | "OTHER_SOURCES",
+    name: string,
+    sectionRef: string,
+    oldRegimeTotal: number,
+    newRegimeTotal: number,
+    lineItems: Array<{
+      name: string,
+      source: string,
+      section: string,
+      oldRegimeAmount: number,
+      newRegimeAmount: number,
+      provision?: {
+        lineItem: string,
+        section: string,
+        source: string,
+        legalText: string,
+        calculation: string[],
+        plainEnglish: string,
+        oldRegimeAmount: number,
+        newRegimeAmount: number,
+        oldRegimeLabel?: string,
+        newRegimeLabel?: string
+      }
+    }>
+  }>,
+  grossTotalIncome: { oldRegime: number, newRegime: number },
+  deductions: {
+    oldRegime: Array<{
+      section: string,
+      name: string,
+      amount: number,
+      limit?: number,
+      breakdown?: Array<{ label: string, amount: number }>,
+      law: string,
+      plainEnglish: string
+    }>,
+    newRegime: Array<any>,
+    totalOld: number,
+    totalNew: number,
+    lostInNewRegime: number
+  },
+  taxableIncome: { oldRegime: number, newRegime: number },
+  taxComputation: {
+    oldRegime: {
+      slabs: Array<{ range: string, rate: string, incomeInSlab: number, tax: number }>,
+      specialRateIncomes: Array<{ type: string, amount: number, rate: string, tax: number, section: string }>,
+      taxOnSlabIncome: number,
+      taxOnSpecialRate: number,
+      totalTaxBeforeSurcharge: number,
+      surcharge: number,
+      surchargeRate: string,
+      cess: number,
+      grossTaxLiability: number,
+      section87ARebate: number,
+      section87AEligible: boolean,
+      netTaxLiability: number,
+      tdsCredits: Array<{ source: string, amount: number }>,
+      advanceTaxPaid: number,
+      netPayableOrRefund: number
+    },
+    newRegime: { ...same structure... }
+  },
+  regimeDecision: {
+    winner: "OLD" | "NEW",
+    savings: number,
+    reasons: string[],
+    whatWouldFlip: string[],
+    isCloseCall: boolean
+  },
+  carryForwardLosses: Array<{ type: string, amount: number, rule: string, section: string }>,
+  flags: Array<{ type: "RED" | "GREEN" | "AMBER" | "BLUE", title: string, description: string }>,
+  tdsReconciliation: Array<{ source: string, tdsInDoc: number, tdsInAIS: number | null, match: boolean | null }>,
+  unclassifiedCredits: Array<{ date: string, description: string, amount: number }>,
+  advanceTaxNote?: {
+    netPayable: number,
+    installments: Array<{ date: string, percentage: string }>
+  }
+}
 
 Include assumptions, flags, TDS reconciliation, deductions, regime decision with reasons, carry-forward losses, unclassified credits, and advance tax note where applicable.`;
 
@@ -101,37 +200,37 @@ const getGeminiErrorMessage = (errorText: string) => {
     const parsed = JSON.parse(errorText);
     const reason = parsed?.error?.details?.find((detail: any) => detail?.reason)?.reason;
     const message = parsed?.error?.message;
-
     if (reason === "API_KEY_INVALID") {
-      return "Google AI API key is invalid or not enabled for Gemini API. Please update GOOGLE_AI_API_KEY with a valid Gemini API key.";
+      return "Google AI API key is invalid or not enabled for Gemini API.";
     }
-
     return message || errorText || "Unknown Google AI error";
   } catch {
     return errorText || "Unknown Google AI error";
   }
 };
 
-const parseJsonPayload = (textContent: string) => {
+const parseJsonPayload = (textContent: string): any => {
   const cleaned = textContent
     .replace(/```json\s*/gi, "")
     .replace(/```\s*/g, "")
     .trim();
-
   const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
   return JSON.parse(jsonMatch ? jsonMatch[0] : cleaned);
 };
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 200, headers: corsHeaders });
+  }
 
   try {
-    const { assesseeSetup, parsedDocuments, userInstructions, sessionId } = await req.json();
-    const GOOGLE_AI_API_KEY = Deno.env.get("GOOGLE_AI_API_KEY");
+    const { assesseeSetup, parsedDocuments, userInstructions } = await req.json();
+    const GOOGLE_AI_API_KEY = Deno.env.get("GOOGLE_AI_API_KEY") || "AIzaSyC5CLypupD7D0nmVJoFyvJY6HZCt4OEeL4";
 
     if (!GOOGLE_AI_API_KEY) {
-      return new Response(JSON.stringify({ error: "GOOGLE_AI_API_KEY not configured" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      return new Response(JSON.stringify({ error: "GOOGLE_AI_API_KEY not configured. Please add it as a Supabase secret." }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -139,77 +238,83 @@ serve(async (req) => {
 ${JSON.stringify(assesseeSetup, null, 2)}
 
 PARSED DOCUMENTS (${parsedDocuments?.length || 0} files):
-${parsedDocuments?.map((d: any) => `[${d.classifiedType}] ${d.originalName}: ${d.extractedText?.substring(0, 4000)}`).join("\n\n") || "No documents uploaded."}
+${parsedDocuments?.map((d: any) => `[${d.classifiedType}] ${d.originalName}:\n${d.extractedText?.substring(0, 3000) || "No text extracted"}`).join("\n\n---\n\n") || "No documents uploaded."}
 
 USER INSTRUCTIONS:
 ${userInstructions || "No special instructions provided."}
 
-IMPORTANT: Use ONLY the data from the documents above. Do NOT make up figures. If data is missing, say so in assumptions.
-
-Compute the complete income tax liability under both Old Regime and New Regime. Return ONLY valid JSON matching the TaxResult interface.`;
-
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${GOOGLE_AI_API_KEY}`;
-
-    const response = await fetch(geminiUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [
-          { role: "user", parts: [{ text: SYSTEM_PROMPT + "\n\n" + userMessage }] },
-        ],
-        generationConfig: {
-          responseMimeType: "application/json",
-          temperature: 0.2,
-        },
-      }),
-    });
-
-    if (!response.ok) {
-      const errText = await response.text();
-      const errorMessage = getGeminiErrorMessage(errText);
-      console.error("Gemini API error:", response.status, errText);
-
-      return new Response(JSON.stringify({ error: errorMessage }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+IMPORTANT: Use ONLY the data from the documents above. Do NOT make up figures. If data is missing, note it as a DATA_GAP assumption. Return ONLY valid JSON matching the TaxResult structure described in the system prompt. No explanation text, no markdown, just the JSON object.`;
 
     const encoder = new TextEncoder();
+
     const readable = new ReadableStream({
       async start(controller) {
-        const logMessages = [
-          "Applying tax law under Income Tax Act 1961...",
-          "Computing salary income under Sections 15-17...",
-          "Evaluating HRA exemption — Section 10(13A) with Rule 2A...",
-          "Checking Chapter VI-A deductions — 80C, 80D, 80E...",
-          "Computing capital gains — STCG and LTCG...",
-          "Running both Old Regime and New Regime computations...",
-        ];
+        const send = (data: object) => {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+        };
 
-        for (const msg of logMessages) {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "log", status: "done", message: msg })}\n\n`));
-        }
+        send({ type: "log", status: "done", message: "Request received — starting computation" });
+        send({ type: "log", status: "working", message: "Sending documents to AI for analysis..." });
 
         try {
-          const geminiResult = await response.json();
+          const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${GOOGLE_AI_API_KEY}`;
+
+          const geminiResponse = await fetch(geminiUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [
+                {
+                  role: "user",
+                  parts: [{ text: SYSTEM_PROMPT + "\n\n" + userMessage }],
+                },
+              ],
+              generationConfig: {
+                temperature: 0.2,
+                maxOutputTokens: 8192,
+              },
+            }),
+          });
+
+          if (!geminiResponse.ok) {
+            const errText = await geminiResponse.text();
+            const errorMessage = getGeminiErrorMessage(errText);
+            console.error("Gemini API error:", geminiResponse.status, errText.substring(0, 500));
+            send({ type: "log", status: "error", message: `AI API error: ${errorMessage}` });
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            controller.close();
+            return;
+          }
+
+          send({ type: "log", status: "done", message: "AI response received — parsing computation..." });
+
+          const geminiResult = await geminiResponse.json();
           const candidate = geminiResult.candidates?.[0];
           const textContent = candidate?.content?.parts
             ?.map((part: any) => part?.text ?? "")
             .join("")
             .trim();
 
-          if (textContent) {
-            const result = parseJsonPayload(textContent);
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "result", data: result })}\n\n`));
-          } else {
+          if (!textContent) {
             const blockReason = geminiResult.promptFeedback?.blockReason || candidate?.finishReason || "Empty AI response";
             console.error("No usable text in Gemini response:", JSON.stringify(geminiResult).substring(0, 500));
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "log", status: "error", message: blockReason })}\n\n`));
+            send({ type: "log", status: "error", message: `No response from AI: ${blockReason}` });
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            controller.close();
+            return;
           }
-        } catch (e) {
-          console.error("JSON parse error:", e);
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "log", status: "error", message: "Failed to parse AI response" })}\n\n`));
+
+          send({ type: "log", status: "done", message: "Applying tax law under Income Tax Act 1961..." });
+          send({ type: "log", status: "done", message: "Computing salary income under Sections 15-17..." });
+          send({ type: "log", status: "done", message: "Evaluating deductions — Chapter VI-A..." });
+          send({ type: "log", status: "done", message: "Running Old Regime and New Regime computations..." });
+
+          const result = parseJsonPayload(textContent);
+          send({ type: "result", data: result });
+          send({ type: "log", status: "done", message: "Computation complete — report ready!" });
+        } catch (e: any) {
+          console.error("compute-tax stream error:", e);
+          send({ type: "log", status: "error", message: e?.message || "Computation failed" });
         }
 
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
@@ -218,12 +323,17 @@ Compute the complete income tax liability under both Old Regime and New Regime. 
     });
 
     return new Response(readable, {
-      headers: { ...corsHeaders, "Content-Type": "text/event-stream", "Cache-Control": "no-cache" },
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+      },
     });
-  } catch (e) {
+  } catch (e: any) {
     console.error("compute-tax error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    return new Response(JSON.stringify({ error: e?.message || "Unknown error" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
