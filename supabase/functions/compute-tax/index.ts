@@ -25,6 +25,8 @@ Every single rupee figure you compute must be explained with:
 
 NO figure should appear without its full provenance.
 
+CRITICAL INSTRUCTION: Base your computation ONLY on the data extracted from the uploaded documents and the user's instructions. Do NOT invent, assume, or fabricate any income figures, deduction amounts, or personal details. If a document does not contain certain information, state that explicitly in the assumptions section. Every number must trace back to a specific document or instruction provided.
+
 ASSESSMENT YEAR TERMINOLOGY
 Always use "Assessment Year (AY)" terminology. Never use "Tax Year" or "Previous Year".
 
@@ -99,10 +101,10 @@ serve(async (req) => {
 
   try {
     const { assesseeSetup, parsedDocuments, userInstructions, sessionId } = await req.json();
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const GOOGLE_AI_API_KEY = Deno.env.get("GOOGLE_AI_API_KEY");
 
-    if (!LOVABLE_API_KEY) {
-      return new Response(JSON.stringify({ error: "LOVABLE_API_KEY not configured" }), {
+    if (!GOOGLE_AI_API_KEY) {
+      return new Response(JSON.stringify({ error: "GOOGLE_AI_API_KEY not configured" }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -111,42 +113,35 @@ serve(async (req) => {
 ${JSON.stringify(assesseeSetup, null, 2)}
 
 PARSED DOCUMENTS (${parsedDocuments?.length || 0} files):
-${parsedDocuments?.map((d: any) => `[${d.classifiedType}] ${d.originalName}: ${d.extractedText?.substring(0, 2000)}`).join("\n\n") || "No documents uploaded."}
+${parsedDocuments?.map((d: any) => `[${d.classifiedType}] ${d.originalName}: ${d.extractedText?.substring(0, 4000)}`).join("\n\n") || "No documents uploaded."}
 
 USER INSTRUCTIONS:
 ${userInstructions || "No special instructions provided."}
 
+IMPORTANT: Use ONLY the data from the documents above. Do NOT make up figures. If data is missing, say so in assumptions.
+
 Compute the complete income tax liability under both Old Regime and New Regime. Return ONLY valid JSON matching the TaxResult interface.`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    // Call Google Gemini API directly
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${GOOGLE_AI_API_KEY}`;
+
+    const response = await fetch(geminiUrl, {
       method: "POST",
-      headers: {
-        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "google/gemini-2.5-pro",
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: userMessage },
+        contents: [
+          { role: "user", parts: [{ text: SYSTEM_PROMPT + "\n\n" + userMessage }] },
         ],
-        stream: true,
+        generationConfig: {
+          responseMimeType: "application/json",
+          temperature: 0.2,
+        },
       }),
     });
 
     if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "AI credits exhausted. Please add funds in Settings → Workspace → Usage." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
       const errText = await response.text();
-      console.error("AI gateway error:", response.status, errText);
+      console.error("Gemini API error:", response.status, errText);
       return new Response(JSON.stringify({ error: `AI computation failed: ${response.status}` }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -167,45 +162,29 @@ Compute the complete income tax liability under both Old Regime and New Regime. 
 
         for (const msg of logMessages) {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "log", status: "done", message: msg })}\n\n`));
-          await new Promise(r => setTimeout(r, 500));
         }
 
-        // Read the OpenAI-compatible streaming response
-        const reader = response.body!.getReader();
-        const decoder = new TextDecoder();
-        let fullText = "";
-        let buffer = "";
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-
-          let nlIdx: number;
-          while ((nlIdx = buffer.indexOf("\n")) !== -1) {
-            const line = buffer.slice(0, nlIdx).trim();
-            buffer = buffer.slice(nlIdx + 1);
-            if (!line.startsWith("data: ")) continue;
-            const jsonStr = line.slice(6).trim();
-            if (jsonStr === "[DONE]") continue;
-            try {
-              const parsed = JSON.parse(jsonStr);
-              const content = parsed.choices?.[0]?.delta?.content;
-              if (content) {
-                fullText += content;
-              }
-            } catch {}
-          }
-        }
-
-        // Parse the full JSON result
         try {
-          const jsonMatch = fullText.match(/\{[\s\S]*\}/);
-          if (jsonMatch) {
-            const result = JSON.parse(jsonMatch[0]);
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "result", data: result })}\n\n`));
+          const geminiResult = await response.json();
+          const textContent = geminiResult.candidates?.[0]?.content?.parts?.[0]?.text;
+
+          if (textContent) {
+            const jsonMatch = textContent.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+              const result = JSON.parse(jsonMatch[0]);
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "result", data: result })}\n\n`));
+            } else {
+              // responseMimeType=application/json means textContent IS the JSON
+              try {
+                const result = JSON.parse(textContent);
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "result", data: result })}\n\n`));
+              } catch {
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "log", status: "error", message: "No valid JSON found in AI response" })}\n\n`));
+              }
+            }
           } else {
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "log", status: "error", message: "No valid JSON found in AI response" })}\n\n`));
+            console.error("No text in Gemini response:", JSON.stringify(geminiResult).substring(0, 500));
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "log", status: "error", message: "Empty AI response" })}\n\n`));
           }
         } catch (e) {
           console.error("JSON parse error:", e);
