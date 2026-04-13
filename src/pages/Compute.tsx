@@ -134,7 +134,16 @@ const Compute = () => {
 
       if (!response.ok) {
         const errText = await response.text();
-        throw new Error(errText || "Computation failed");
+        let errorMessage = "Computation failed";
+
+        try {
+          const parsedError = JSON.parse(errText);
+          errorMessage = parsedError.error || errorMessage;
+        } catch {
+          errorMessage = errText || errorMessage;
+        }
+
+        throw new Error(errorMessage);
       }
 
       // Process streaming response

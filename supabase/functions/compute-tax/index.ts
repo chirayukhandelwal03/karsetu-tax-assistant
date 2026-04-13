@@ -96,6 +96,32 @@ For each line item provision card, include:
 
 Include assumptions, flags, TDS reconciliation, deductions, regime decision with reasons, carry-forward losses, unclassified credits, and advance tax note where applicable.`;
 
+const getGeminiErrorMessage = (errorText: string) => {
+  try {
+    const parsed = JSON.parse(errorText);
+    const reason = parsed?.error?.details?.find((detail: any) => detail?.reason)?.reason;
+    const message = parsed?.error?.message;
+
+    if (reason === "API_KEY_INVALID") {
+      return "Google AI API key is invalid or not enabled for Gemini API. Please update GOOGLE_AI_API_KEY with a valid Gemini API key.";
+    }
+
+    return message || errorText || "Unknown Google AI error";
+  } catch {
+    return errorText || "Unknown Google AI error";
+  }
+};
+
+const parseJsonPayload = (textContent: string) => {
+  const cleaned = textContent
+    .replace(/```json\s*/gi, "")
+    .replace(/```\s*/g, "")
+    .trim();
+
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+  return JSON.parse(jsonMatch ? jsonMatch[0] : cleaned);
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -122,7 +148,6 @@ IMPORTANT: Use ONLY the data from the documents above. Do NOT make up figures. I
 
 Compute the complete income tax liability under both Old Regime and New Regime. Return ONLY valid JSON matching the TaxResult interface.`;
 
-    // Call Google Gemini API directly
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${GOOGLE_AI_API_KEY}`;
 
     const response = await fetch(geminiUrl, {
@@ -141,13 +166,15 @@ Compute the complete income tax liability under both Old Regime and New Regime. 
 
     if (!response.ok) {
       const errText = await response.text();
+      const errorMessage = getGeminiErrorMessage(errText);
       console.error("Gemini API error:", response.status, errText);
-      return new Response(JSON.stringify({ error: `AI computation failed: ${response.status}` }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+
+      return new Response(JSON.stringify({ error: errorMessage }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Stream SSE back to client with log entries
     const encoder = new TextEncoder();
     const readable = new ReadableStream({
       async start(controller) {
@@ -166,25 +193,19 @@ Compute the complete income tax liability under both Old Regime and New Regime. 
 
         try {
           const geminiResult = await response.json();
-          const textContent = geminiResult.candidates?.[0]?.content?.parts?.[0]?.text;
+          const candidate = geminiResult.candidates?.[0];
+          const textContent = candidate?.content?.parts
+            ?.map((part: any) => part?.text ?? "")
+            .join("")
+            .trim();
 
           if (textContent) {
-            const jsonMatch = textContent.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-              const result = JSON.parse(jsonMatch[0]);
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "result", data: result })}\n\n`));
-            } else {
-              // responseMimeType=application/json means textContent IS the JSON
-              try {
-                const result = JSON.parse(textContent);
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "result", data: result })}\n\n`));
-              } catch {
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "log", status: "error", message: "No valid JSON found in AI response" })}\n\n`));
-              }
-            }
+            const result = parseJsonPayload(textContent);
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "result", data: result })}\n\n`));
           } else {
-            console.error("No text in Gemini response:", JSON.stringify(geminiResult).substring(0, 500));
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "log", status: "error", message: "Empty AI response" })}\n\n`));
+            const blockReason = geminiResult.promptFeedback?.blockReason || candidate?.finishReason || "Empty AI response";
+            console.error("No usable text in Gemini response:", JSON.stringify(geminiResult).substring(0, 500));
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "log", status: "error", message: blockReason })}\n\n`));
           }
         } catch (e) {
           console.error("JSON parse error:", e);
