@@ -195,17 +195,57 @@ The JSON must match this TypeScript structure exactly:
 
 Include assumptions, flags, TDS reconciliation, deductions, regime decision with reasons, carry-forward losses, unclassified credits, and advance tax note where applicable.`;
 
-const getGeminiErrorMessage = (errorText: string) => {
+type GeminiErrorResult = {
+  message: string;
+  code: "API_KEY_MISSING" | "API_KEY_INVALID" | "GEMINI_QUOTA_EXCEEDED" | "GEMINI_PERMISSION_DENIED" | "GEMINI_SERVER_ERROR" | "GEMINI_UNKNOWN_ERROR";
+  actionable: string;
+};
+
+const getGeminiErrorDetails = (status: number, errorText: string): GeminiErrorResult => {
   try {
     const parsed = JSON.parse(errorText);
     const reason = parsed?.error?.details?.find((detail: any) => detail?.reason)?.reason;
-    const message = parsed?.error?.message;
-    if (reason === "API_KEY_INVALID") {
-      return "Google AI API key is invalid or not enabled for Gemini API.";
+    const message = parsed?.error?.message || "Unknown Google AI error";
+
+    if (status === 400 && reason === "API_KEY_INVALID") {
+      return {
+        message: "Google AI API key is invalid or not enabled for Gemini API.",
+        code: "API_KEY_INVALID",
+        actionable: "In the Supabase dashboard → Edge Functions → Secrets, set GOOGLE_AI_API_KEY to a valid Gemini API key from https://aistudio.google.com/app/apikey then redeploy.",
+      };
     }
-    return message || errorText || "Unknown Google AI error";
+    if (status === 403) {
+      return {
+        message: "Access denied by Google AI API.",
+        code: "GEMINI_PERMISSION_DENIED",
+        actionable: "Ensure the Gemini API is enabled for your Google Cloud project and the key has the correct permissions.",
+      };
+    }
+    if (status === 429) {
+      return {
+        message: "Google AI API quota exceeded or rate limit hit.",
+        code: "GEMINI_QUOTA_EXCEEDED",
+        actionable: "Wait a moment and retry, or upgrade your Gemini API quota at https://aistudio.google.com.",
+      };
+    }
+    if (status >= 500) {
+      return {
+        message: "Google AI service is temporarily unavailable.",
+        code: "GEMINI_SERVER_ERROR",
+        actionable: "This is a transient Google error. Please retry in a few seconds.",
+      };
+    }
+    return {
+      message,
+      code: "GEMINI_UNKNOWN_ERROR",
+      actionable: "Check Google AI API status and your API key configuration.",
+    };
   } catch {
-    return errorText || "Unknown Google AI error";
+    return {
+      message: errorText || "Unknown Google AI error",
+      code: "GEMINI_UNKNOWN_ERROR",
+      actionable: "Check Google AI API status and your API key configuration.",
+    };
   }
 };
 
@@ -225,13 +265,22 @@ Deno.serve(async (req: Request) => {
 
   try {
     const { assesseeSetup, parsedDocuments, userInstructions } = await req.json();
-    const GOOGLE_AI_API_KEY = Deno.env.get("GOOGLE_AI_API_KEY") || "AIzaSyC5CLypupD7D0nmVJoFyvJY6HZCt4OEeL4";
+    // Prefer canonical name; fall back to legacy name for backward compatibility.
+    const GOOGLE_AI_API_KEY = Deno.env.get("GOOGLE_AI_API_KEY") || Deno.env.get("GOOGLE_GENERATIVE_AI_API_KEY");
 
     if (!GOOGLE_AI_API_KEY) {
-      return new Response(JSON.stringify({ error: "GOOGLE_AI_API_KEY not configured. Please add it as a Supabase secret." }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      console.error("compute-tax: GOOGLE_AI_API_KEY secret is not configured.");
+      return new Response(
+        JSON.stringify({
+          error: "Google AI API key is not configured on this server.",
+          code: "API_KEY_MISSING",
+          actionable: "In the Supabase dashboard → Edge Functions → Secrets, add GOOGLE_AI_API_KEY with a valid Gemini API key from https://aistudio.google.com/app/apikey then redeploy the function.",
+        }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
     const userMessage = `ASSESSEE SETUP:
@@ -278,9 +327,14 @@ IMPORTANT: Use ONLY the data from the documents above. Do NOT make up figures. I
 
           if (!geminiResponse.ok) {
             const errText = await geminiResponse.text();
-            const errorMessage = getGeminiErrorMessage(errText);
-            console.error("Gemini API error:", geminiResponse.status, errText.substring(0, 500));
-            send({ type: "log", status: "error", message: `AI API error: ${errorMessage}` });
+            const errorDetails = getGeminiErrorDetails(geminiResponse.status, errText);
+            console.error(`compute-tax: Gemini API error (HTTP ${geminiResponse.status}):`, errorDetails.message);
+            send({
+              type: "error",
+              code: errorDetails.code,
+              message: errorDetails.message,
+              actionable: errorDetails.actionable,
+            });
             controller.enqueue(encoder.encode("data: [DONE]\n\n"));
             controller.close();
             return;
@@ -297,8 +351,13 @@ IMPORTANT: Use ONLY the data from the documents above. Do NOT make up figures. I
 
           if (!textContent) {
             const blockReason = geminiResult.promptFeedback?.blockReason || candidate?.finishReason || "Empty AI response";
-            console.error("No usable text in Gemini response:", JSON.stringify(geminiResult).substring(0, 500));
-            send({ type: "log", status: "error", message: `No response from AI: ${blockReason}` });
+            console.error("compute-tax: No usable text in Gemini response:", JSON.stringify(geminiResult).substring(0, 500));
+            send({
+              type: "error",
+              code: "GEMINI_EMPTY_RESPONSE",
+              message: `No response from AI: ${blockReason}`,
+              actionable: "The AI response was blocked or empty. Retry, or simplify/reduce uploaded documents.",
+            });
             controller.enqueue(encoder.encode("data: [DONE]\n\n"));
             controller.close();
             return;
@@ -314,7 +373,12 @@ IMPORTANT: Use ONLY the data from the documents above. Do NOT make up figures. I
           send({ type: "log", status: "done", message: "Computation complete — report ready!" });
         } catch (e: any) {
           console.error("compute-tax stream error:", e);
-          send({ type: "log", status: "error", message: e?.message || "Computation failed" });
+          send({
+            type: "error",
+            code: "COMPUTE_ERROR",
+            message: e?.message || "Computation failed unexpectedly.",
+            actionable: "Please retry. If the problem persists, check Edge Function logs in your Supabase dashboard.",
+          });
         }
 
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
@@ -331,9 +395,16 @@ IMPORTANT: Use ONLY the data from the documents above. Do NOT make up figures. I
     });
   } catch (e: any) {
     console.error("compute-tax error:", e);
-    return new Response(JSON.stringify({ error: e?.message || "Unknown error" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({
+        error: e?.message || "Unknown error",
+        code: "COMPUTE_ERROR",
+        actionable: "Please retry. If the problem persists, check Edge Function logs in your Supabase dashboard.",
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
+    );
   }
 });

@@ -93,7 +93,7 @@ Output ONLY the extracted text content in a clean format, no commentary.`;
     });
 
     if (!response.ok) {
-      console.error("Gemini OCR error:", response.status);
+      console.error(`parse-documents: Gemini OCR error (HTTP ${response.status}) for file: ${fileName}`);
       return extractTextBasic(base64, mimeType);
     }
 
@@ -124,7 +124,11 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const GOOGLE_AI_API_KEY = Deno.env.get("GOOGLE_AI_API_KEY") || "AIzaSyC5CLypupD7D0nmVJoFyvJY6HZCt4OEeL4";
+    // Prefer canonical name; fall back to legacy name for backward compatibility.
+    const GOOGLE_AI_API_KEY = Deno.env.get("GOOGLE_AI_API_KEY") || Deno.env.get("GOOGLE_GENERATIVE_AI_API_KEY");
+    if (!GOOGLE_AI_API_KEY) {
+      console.warn("parse-documents: GOOGLE_AI_API_KEY is not configured — falling back to basic text extraction.");
+    }
     const documents = [];
     const errors: string[] = [];
 
@@ -165,9 +169,16 @@ Deno.serve(async (req: Request) => {
     });
   } catch (e: any) {
     console.error("parse-documents error:", e);
-    return new Response(JSON.stringify({ error: e?.message || "Unknown error" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({
+        error: e?.message || "Unknown error",
+        code: "PARSE_ERROR",
+        actionable: "Please retry. If the problem persists, check Edge Function logs in your Supabase dashboard.",
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
+    );
   }
 });

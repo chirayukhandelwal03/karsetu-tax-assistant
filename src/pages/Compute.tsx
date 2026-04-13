@@ -82,6 +82,14 @@ const Compute = () => {
       setState((s) => ({ ...s, logEntries: [...s.logEntries, entry] }));
     };
 
+    /** Build a user-friendly error string from a structured API error payload. */
+    const buildErrorMessage = (payload: { error?: string; code?: string; actionable?: string } | null, fallback: string): string => {
+      if (!payload) return fallback;
+      const base = payload.error || fallback;
+      if (payload.actionable) return `${base}\n\n${payload.actionable}`;
+      return base;
+    };
+
     try {
       addLog("done", `Documents received — ${totalFiles} files · ${(totalSize / 1024 / 1024).toFixed(1)} MB total`);
       setState((s) => ({ ...s, progress: 10 }));
@@ -107,7 +115,15 @@ const Compute = () => {
         const { data: parseResult, error: parseError } = await supabase.functions.invoke("parse-documents", {
           body: { files: filesData },
         });
-        if (parseError) throw new Error(parseError.message);
+        if (parseError) {
+          // parseError.message may already contain a structured payload
+          let msg = parseError.message || "Document parsing failed";
+          try {
+            const inner = JSON.parse(parseError.message);
+            msg = buildErrorMessage(inner, msg);
+          } catch (_e) { /* not JSON, use message as-is */ }
+          throw new Error(msg);
+        }
         parsedDocs = parseResult?.documents || [];
         addLog("done", `${parsedDocs.length} documents parsed and classified`);
       } else {
@@ -134,15 +150,11 @@ const Compute = () => {
 
       if (!response.ok) {
         const errText = await response.text();
-        let errorMessage = "Computation failed";
-
+        let errorPayload: { error?: string; code?: string; actionable?: string } | null = null;
         try {
-          const parsedError = JSON.parse(errText);
-          errorMessage = parsedError.error || errorMessage;
-        } catch {
-          errorMessage = errText || errorMessage;
-        }
-
+          errorPayload = JSON.parse(errText);
+        } catch { /* not JSON */ }
+        const errorMessage = buildErrorMessage(errorPayload, "Computation failed");
         throw new Error(errorMessage);
       }
 
@@ -151,9 +163,10 @@ const Compute = () => {
       const decoder = new TextDecoder();
       let fullResponse = "";
       let buffer = "";
+      let streamError: string | null = null;
 
       if (reader) {
-        while (true) {
+        outer: while (true) {
           const { done, value } = await reader.read();
           if (done) break;
           buffer += decoder.decode(value, { stream: true });
@@ -165,18 +178,28 @@ const Compute = () => {
             if (line.endsWith("\r")) line = line.slice(0, -1);
             if (!line.startsWith("data: ")) continue;
             const jsonStr = line.slice(6).trim();
-            if (jsonStr === "[DONE]") break;
+            if (jsonStr === "[DONE]") break outer;
             try {
               const parsed = JSON.parse(jsonStr);
               if (parsed.type === "log") {
                 addLog(parsed.status, parsed.message);
                 setState((s) => ({ ...s, progress: Math.min(90, s.progress + 5) }));
+              } else if (parsed.type === "error") {
+                // Fatal error from the edge function
+                const msg = buildErrorMessage(parsed, parsed.message || "Computation failed");
+                streamError = msg;
+                addLog("error", parsed.message || "Computation failed");
+                break outer;
               } else if (parsed.type === "result") {
                 fullResponse = JSON.stringify(parsed.data);
               }
             } catch {}
           }
         }
+      }
+
+      if (streamError) {
+        throw new Error(streamError);
       }
 
       setState((s) => ({ ...s, progress: 95 }));
@@ -495,9 +518,11 @@ const Compute = () => {
 
               {state.error && (
                 <div className="bg-kred-pale border border-kred/30 rounded-lg p-4 mb-4">
-                  <h3 className="font-semibold text-ink mb-1">Something went wrong</h3>
-                  <p className="text-sm text-ink-soft mb-3">{state.error}</p>
-                  <Button onClick={startComputation} variant="outline">Retry →</Button>
+                  <h3 className="font-semibold text-ink mb-1">Computation failed</h3>
+                  {state.error?.split("\n\n").map((para, i) => (
+                    <p key={i} className={`text-sm mb-2 ${i === 0 ? "text-ink-soft" : "text-blue-deep font-medium"}`}>{para}</p>
+                  ))}
+                  <Button onClick={startComputation} variant="outline" className="mt-1">Retry →</Button>
                 </div>
               )}
 
