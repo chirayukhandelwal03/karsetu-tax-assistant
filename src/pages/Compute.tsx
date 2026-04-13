@@ -102,7 +102,7 @@ const Compute = () => {
       setState((s) => ({ ...s, progress: 25 }));
 
       // Call parse-documents
-      let parsedDocs: any[] = [];
+      let parsedDocs: unknown[] = [];
       if (filesData.length > 0) {
         const { data: parseResult, error: parseError } = await supabase.functions.invoke("parse-documents", {
           body: { files: filesData },
@@ -174,7 +174,7 @@ const Compute = () => {
               } else if (parsed.type === "result") {
                 fullResponse = JSON.stringify(parsed.data);
               }
-            } catch {}
+            } catch { /* ignore malformed SSE line */ }
           }
         }
       }
@@ -198,9 +198,10 @@ const Compute = () => {
         sessionStorage.setItem("karsetu_result", JSON.stringify(result));
         sessionStorage.setItem("karsetu_setup", JSON.stringify(state.assesseeSetup));
       }
-    } catch (err: any) {
-      addLog("error", err.message || "An error occurred");
-      setState((s) => ({ ...s, isProcessing: false, error: err.message }));
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "An error occurred";
+      addLog("error", message);
+      setState((s) => ({ ...s, isProcessing: false, error: message }));
     }
   };
 
