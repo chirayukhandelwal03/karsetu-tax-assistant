@@ -225,10 +225,10 @@ Deno.serve(async (req: Request) => {
 
   try {
     const { assesseeSetup, parsedDocuments, userInstructions } = await req.json();
-    const GOOGLE_AI_API_KEY = Deno.env.get("GOOGLE_AI_API_KEY") || "AIzaSyC5CLypupD7D0nmVJoFyvJY6HZCt4OEeL4";
+    const GOOGLE_AI_API_KEY = Deno.env.get("GOOGLE_AI_API_KEY");
 
     if (!GOOGLE_AI_API_KEY) {
-      return new Response(JSON.stringify({ error: "GOOGLE_AI_API_KEY not configured. Please add it as a Supabase secret." }), {
+      return new Response(JSON.stringify({ error: "GOOGLE_AI_API_KEY is not configured. Please add it as a Supabase Edge Function secret and redeploy." }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
