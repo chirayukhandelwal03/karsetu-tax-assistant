@@ -197,7 +197,7 @@ Include assumptions, flags, TDS reconciliation, deductions, regime decision with
 
 type GeminiErrorResult = {
   message: string;
-  code: "API_KEY_MISSING" | "API_KEY_INVALID" | "GEMINI_QUOTA_EXCEEDED" | "GEMINI_PERMISSION_DENIED" | "GEMINI_SERVER_ERROR" | "GEMINI_UNKNOWN_ERROR";
+  code: "API_KEY_MISSING" | "API_KEY_INVALID" | "GEMINI_QUOTA_EXCEEDED" | "GEMINI_PERMISSION_DENIED" | "GEMINI_SERVER_ERROR" | "GEMINI_EMPTY_RESPONSE" | "GEMINI_UNKNOWN_ERROR" | "COMPUTE_ERROR";
   actionable: string;
 };
 

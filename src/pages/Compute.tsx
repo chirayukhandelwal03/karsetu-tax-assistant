@@ -166,7 +166,7 @@ const Compute = () => {
       let streamError: string | null = null;
 
       if (reader) {
-        outer: while (true) {
+        sseLoop: while (true) {
           const { done, value } = await reader.read();
           if (done) break;
           buffer += decoder.decode(value, { stream: true });
@@ -178,7 +178,7 @@ const Compute = () => {
             if (line.endsWith("\r")) line = line.slice(0, -1);
             if (!line.startsWith("data: ")) continue;
             const jsonStr = line.slice(6).trim();
-            if (jsonStr === "[DONE]") break outer;
+            if (jsonStr === "[DONE]") break sseLoop;
             try {
               const parsed = JSON.parse(jsonStr);
               if (parsed.type === "log") {
@@ -189,7 +189,7 @@ const Compute = () => {
                 const msg = buildErrorMessage(parsed, parsed.message || "Computation failed");
                 streamError = msg;
                 addLog("error", parsed.message || "Computation failed");
-                break outer;
+                break sseLoop;
               } else if (parsed.type === "result") {
                 fullResponse = JSON.stringify(parsed.data);
               }
