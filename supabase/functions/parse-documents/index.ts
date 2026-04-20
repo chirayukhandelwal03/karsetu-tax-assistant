@@ -6,6 +6,32 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+const validateRequest = (req: Request): { ok: true } | { ok: false; status: number; message: string; actionable: string } => {
+  const authHeader = req.headers.get("Authorization") || req.headers.get("authorization");
+  if (authHeader) {
+    const parts = authHeader.split(" ");
+    if (parts.length !== 2 || parts[0].toLowerCase() !== "bearer") {
+      return {
+        ok: false,
+        status: 401,
+        message: "Invalid Authorization header format",
+        actionable: "Authorization header must be in the format: 'Bearer <token>'. Ensure your Supabase client is initialized with the correct ANON key (a JWT starting with eyJ...).",
+      };
+    }
+    const token = parts[1];
+    const jwtParts = token.split(".");
+    if (jwtParts.length !== 3) {
+      return {
+        ok: false,
+        status: 401,
+        message: "Invalid Token or Protected Header formatting",
+        actionable: "The supplied Bearer token is not a valid JWT (expected three dot-separated base64url segments). Verify that VITE_SUPABASE_PUBLISHABLE_KEY / SUPABASE_ANON_KEY is set to your project's anon key, not a plain API key or URL.",
+      };
+    }
+  }
+  return { ok: true };
+};
+
 const classifierKeywords: Record<string, string[]> = {
   FORM_16: ["certificate under section 203", "form no. 16", "details of salary paid", "tds certificate", "form 16", "employer"],
   FORM_26AS: ["annual tax statement", "tax credit statement", "form 26as"],
@@ -115,6 +141,14 @@ Deno.serve(async (req: Request) => {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
 
+  const validation = validateRequest(req);
+  if (!validation.ok) {
+    return new Response(
+      JSON.stringify({ code: validation.status, message: validation.message, actionable: validation.actionable }),
+      { status: validation.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
   try {
     const { files } = await req.json();
 
@@ -124,7 +158,10 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const GOOGLE_AI_API_KEY = Deno.env.get("GOOGLE_AI_API_KEY") || "AIzaSyC5CLypupD7D0nmVJoFyvJY6HZCt4OEeL4";
+    const GOOGLE_AI_API_KEY = Deno.env.get("GOOGLE_AI_API_KEY");
+    if (!GOOGLE_AI_API_KEY) {
+      console.warn("GOOGLE_AI_API_KEY secret is not set — AI OCR is unavailable; falling back to basic text extraction for all files");
+    }
     const documents = [];
     const errors: string[] = [];
 

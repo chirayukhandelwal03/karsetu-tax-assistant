@@ -1,1 +1,7 @@
 project_id = "povdmkeurgjmhdlcudqu"
+
+[functions.parse-documents]
+verify_jwt = false
+
+[functions.compute-tax]
+verify_jwt = false
