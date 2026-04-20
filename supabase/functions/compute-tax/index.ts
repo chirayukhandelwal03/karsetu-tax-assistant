@@ -198,7 +198,7 @@ Include assumptions, flags, TDS reconciliation, deductions, regime decision with
 const getGeminiErrorMessage = (errorText: string) => {
   try {
     const parsed = JSON.parse(errorText);
-    const reason = parsed?.error?.details?.find((detail: any) => detail?.reason)?.reason;
+    const reason = parsed?.error?.details?.find((detail: { reason?: string }) => detail?.reason)?.reason;
     const message = parsed?.error?.message;
     if (reason === "API_KEY_INVALID") {
       return "Google AI API key is invalid or not enabled for Gemini API.";
@@ -209,7 +209,7 @@ const getGeminiErrorMessage = (errorText: string) => {
   }
 };
 
-const parseJsonPayload = (textContent: string): any => {
+const parseJsonPayload = (textContent: string): unknown => {
   const cleaned = textContent
     .replace(/```json\s*/gi, "")
     .replace(/```\s*/g, "")
@@ -225,7 +225,7 @@ Deno.serve(async (req: Request) => {
 
   try {
     const { assesseeSetup, parsedDocuments, userInstructions } = await req.json();
-    const GOOGLE_AI_API_KEY = Deno.env.get("GOOGLE_AI_API_KEY") || "AIzaSyC5CLypupD7D0nmVJoFyvJY6HZCt4OEeL4";
+    const GOOGLE_AI_API_KEY = Deno.env.get("GOOGLE_AI_API_KEY");
 
     if (!GOOGLE_AI_API_KEY) {
       return new Response(JSON.stringify({ error: "GOOGLE_AI_API_KEY not configured. Please add it as a Supabase secret." }), {
@@ -234,11 +234,13 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    type ParsedDocument = { classifiedType: string; originalName: string; extractedText?: string };
+    const docs = (parsedDocuments as ParsedDocument[] | null) ?? [];
     const userMessage = `ASSESSEE SETUP:
 ${JSON.stringify(assesseeSetup, null, 2)}
 
-PARSED DOCUMENTS (${parsedDocuments?.length || 0} files):
-${parsedDocuments?.map((d: any) => `[${d.classifiedType}] ${d.originalName}:\n${d.extractedText?.substring(0, 3000) || "No text extracted"}`).join("\n\n---\n\n") || "No documents uploaded."}
+PARSED DOCUMENTS (${docs.length} files):
+${docs.map((d) => `[${d.classifiedType}] ${d.originalName}:\n${d.extractedText?.substring(0, 3000) || "No text extracted"}`).join("\n\n---\n\n") || "No documents uploaded."}
 
 USER INSTRUCTIONS:
 ${userInstructions || "No special instructions provided."}
@@ -288,10 +290,13 @@ IMPORTANT: Use ONLY the data from the documents above. Do NOT make up figures. I
 
           send({ type: "log", status: "done", message: "AI response received — parsing computation..." });
 
-          const geminiResult = await geminiResponse.json();
+          const geminiResult = await geminiResponse.json() as {
+            candidates?: Array<{ content?: { parts?: Array<{ text?: string }> }; finishReason?: string }>;
+            promptFeedback?: { blockReason?: string };
+          };
           const candidate = geminiResult.candidates?.[0];
           const textContent = candidate?.content?.parts
-            ?.map((part: any) => part?.text ?? "")
+            ?.map((part) => part?.text ?? "")
             .join("")
             .trim();
 
@@ -312,9 +317,9 @@ IMPORTANT: Use ONLY the data from the documents above. Do NOT make up figures. I
           const result = parseJsonPayload(textContent);
           send({ type: "result", data: result });
           send({ type: "log", status: "done", message: "Computation complete — report ready!" });
-        } catch (e: any) {
+        } catch (e: unknown) {
           console.error("compute-tax stream error:", e);
-          send({ type: "log", status: "error", message: e?.message || "Computation failed" });
+          send({ type: "log", status: "error", message: e instanceof Error ? e.message : "Computation failed" });
         }
 
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
@@ -329,9 +334,9 @@ IMPORTANT: Use ONLY the data from the documents above. Do NOT make up figures. I
         "Cache-Control": "no-cache",
       },
     });
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error("compute-tax error:", e);
-    return new Response(JSON.stringify({ error: e?.message || "Unknown error" }), {
+    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

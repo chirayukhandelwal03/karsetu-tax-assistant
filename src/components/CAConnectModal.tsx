@@ -28,8 +28,8 @@ const CAConnectModal = ({ open, onClose }: CAConnectModalProps) => {
       toast({ title: "Request submitted!", description: "A CA will contact you soon." });
       onClose();
       setForm({ name: "", mobile: "", city: "", email: "", note: "" });
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } catch (err: unknown) {
+      toast({ title: "Error", description: err instanceof Error ? err.message : "An error occurred", variant: "destructive" });
     } finally {
       setLoading(false);
     }

@@ -7,7 +7,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import DisclaimerBanner from "@/components/DisclaimerBanner";
 import CAConnectModal from "@/components/CAConnectModal";
-import { TaxResult, IncomeHead, LineItem, ProvisionCard as ProvisionCardType, Assumption, Flag, DeductionItem, SlabRow, TDSReconciliationRow, CarryForwardLoss, UnclassifiedCredit } from "@/types/tax";
+import { TaxResult, IncomeHead, LineItem, ProvisionCard as ProvisionCardType, Assumption, Flag, DeductionItem, SlabRow, TDSReconciliationRow, CarryForwardLoss, UnclassifiedCredit, TaxComputation, SpecialRateIncome } from "@/types/tax";
 import { getMockResult } from "@/lib/mockResult";
 
 const formatINR = (n: number | undefined | null) => {
@@ -606,7 +606,7 @@ const DeductionCard = ({ item: d }: { item: DeductionItem }) => (
 );
 
 const TaxSlabTable = ({ title, subtitle, computation: c, taxableIncome }: {
-  title: string; subtitle: string; computation: any; taxableIncome: number;
+  title: string; subtitle: string; computation: TaxComputation; taxableIncome: number;
 }) => (
   <div className="bg-white rounded-xl border border-border p-5">
     <h3 className="font-heading font-bold text-ink mb-1">{title}</h3>
@@ -628,7 +628,7 @@ const TaxSlabTable = ({ title, subtitle, computation: c, taxableIncome }: {
     {c.specialRateIncomes.length > 0 && (
       <div className="mb-3">
         <div className="text-xs font-semibold text-muted-text mb-1">Special Rate Income:</div>
-        {c.specialRateIncomes.map((s: any, i: number) => (
+        {c.specialRateIncomes.map((s: SpecialRateIncome, i: number) => (
           <div key={i} className="flex justify-between text-xs">
             <span>{s.type} ({s.rate})</span>
             <span className="font-mono-num">{formatINR(s.tax)}</span>
@@ -645,7 +645,7 @@ const TaxSlabTable = ({ title, subtitle, computation: c, taxableIncome }: {
       {c.section87AEligible && <div className="flex justify-between text-green-mid"><span>Section 87A Rebate</span><span className="font-mono-num">({formatINR(c.section87ARebate)})</span></div>}
       <div className="flex justify-between font-semibold"><span>Net Tax Liability</span><span className="font-mono-num">{formatINR(c.netTaxLiability)}</span></div>
       <div className="border-t border-border pt-1 mt-1 space-y-0.5">
-        {c.tdsCredits.map((t: any, i: number) => (
+        {c.tdsCredits.map((t: { source: string; amount: number }, i: number) => (
           <div key={i} className="flex justify-between text-muted-text"><span>Less: {t.source}</span><span className="font-mono-num">({formatINR(t.amount)})</span></div>
         ))}
         {c.advanceTaxPaid > 0 && <div className="flex justify-between text-muted-text"><span>Less: Advance Tax</span><span className="font-mono-num">({formatINR(c.advanceTaxPaid)})</span></div>}

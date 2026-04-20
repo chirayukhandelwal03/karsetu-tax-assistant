@@ -59,7 +59,7 @@ const extractTextBasic = (base64: string, mimeType: string): string => {
   }
 };
 
-const useGeminiForOCR = async (base64: string, mimeType: string, fileName: string, apiKey: string): Promise<string> => {
+const extractTextWithGemini = async (base64: string, mimeType: string, fileName: string, apiKey: string): Promise<string> => {
   try {
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
@@ -97,9 +97,9 @@ Output ONLY the extracted text content in a clean format, no commentary.`;
       return extractTextBasic(base64, mimeType);
     }
 
-    const result = await response.json();
+    const result = await response.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
     const extractedText = result.candidates?.[0]?.content?.parts
-      ?.map((part: any) => part?.text ?? "")
+      ?.map((part) => part?.text ?? "")
       .join("")
       .trim();
 
@@ -124,7 +124,7 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const GOOGLE_AI_API_KEY = Deno.env.get("GOOGLE_AI_API_KEY") || "AIzaSyC5CLypupD7D0nmVJoFyvJY6HZCt4OEeL4";
+    const GOOGLE_AI_API_KEY = Deno.env.get("GOOGLE_AI_API_KEY");
     const documents = [];
     const errors: string[] = [];
 
@@ -134,8 +134,8 @@ Deno.serve(async (req: Request) => {
         let extractedText = "";
 
         const canUseAI = GOOGLE_AI_API_KEY && (mimeType.startsWith("image/") || mimeType === "application/pdf");
-        if (canUseAI) {
-          extractedText = await useGeminiForOCR(file.base64 || "", mimeType, file.name, GOOGLE_AI_API_KEY!);
+        if (canUseAI && GOOGLE_AI_API_KEY) {
+          extractedText = await extractTextWithGemini(file.base64 || "", mimeType, file.name, GOOGLE_AI_API_KEY);
         } else {
           extractedText = extractTextBasic(file.base64 || "", mimeType);
         }
@@ -155,17 +155,17 @@ Deno.serve(async (req: Request) => {
             canUseAI ? "AI OCR used for extraction" : "Basic text extraction used",
           ],
         });
-      } catch (e: any) {
-        errors.push(`Failed to parse ${file.name}: ${e?.message || "Unknown error"}`);
+      } catch (e: unknown) {
+        errors.push(`Failed to parse ${file.name}: ${e instanceof Error ? e.message : "Unknown error"}`);
       }
     }
 
     return new Response(JSON.stringify({ documents, totalFiles: documents.length, errors }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error("parse-documents error:", e);
-    return new Response(JSON.stringify({ error: e?.message || "Unknown error" }), {
+    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
