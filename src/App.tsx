@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import Index from "./pages/Index";
 import Compute from "./pages/Compute";
 import Result from "./pages/Result";
+import ResultErrorBoundary from "./components/ResultErrorBoundary";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
 import NotFound from "./pages/NotFound";
@@ -21,7 +22,7 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/compute" element={<Compute />} />
-          <Route path="/result" element={<Result />} />
+          <Route path="/result" element={<ResultErrorBoundary><Result /></ResultErrorBoundary>} />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/terms" element={<Terms />} />
           <Route path="*" element={<NotFound />} />

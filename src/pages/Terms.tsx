@@ -1,13 +1,19 @@
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 
-const Terms = () => (
+const Terms = () => {
+  useDocumentTitle(
+    "Terms of Use — KarSetu.AI",
+    "Terms for using KarSetu.AI: an AI-powered informational tool for Indian income tax computation.",
+  );
+  return (
   <div className="min-h-screen bg-background">
     <Navbar />
     <div className="max-w-3xl mx-auto px-4 py-16">
       <h1 className="font-heading font-bold text-3xl text-ink mb-8">Terms of Use</h1>
       <div className="prose prose-sm text-ink-soft space-y-6">
-        <p><strong>Last updated:</strong> April 2026</p>
+        <p><strong>Last updated:</strong> 23 April 2026</p>
         <h2 className="font-heading font-semibold text-lg text-ink">1. Acceptance</h2>
         <p>By using KarSetu.AI, you agree to these terms. If you do not agree, please do not use the service.</p>
         <h2 className="font-heading font-semibold text-lg text-ink">2. Nature of Service</h2>
@@ -30,6 +36,7 @@ const Terms = () => (
     </div>
     <Footer />
   </div>
-);
+  );
+};
 
 export default Terms;

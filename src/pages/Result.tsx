@@ -1,14 +1,14 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ChevronDown, ChevronRight, Download, FileSpreadsheet, UserCheck, RotateCcw, Trophy, AlertTriangle, CheckCircle, Info, XCircle } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, UserCheck, RotateCcw, Trophy, AlertTriangle, CheckCircle, Info, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import DisclaimerBanner from "@/components/DisclaimerBanner";
 import CAConnectModal from "@/components/CAConnectModal";
 import { TaxResult, IncomeHead, LineItem, ProvisionCard as ProvisionCardType, Assumption, Flag, DeductionItem, SlabRow, TDSReconciliationRow, CarryForwardLoss, UnclassifiedCredit } from "@/types/tax";
-import { getMockResult } from "@/lib/mockResult";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 
 const formatINR = (n: number | undefined | null) => {
   if (n === undefined || n === null || isNaN(Number(n))) return "₹0";
@@ -18,6 +18,10 @@ const formatINR = (n: number | undefined | null) => {
 };
 
 const Result = () => {
+  useDocumentTitle(
+    "Your tax computation — KarSetu.AI",
+    "Cited, line-by-line Indian income tax computation — Old vs New Regime with assumptions and flags.",
+  );
   const navigate = useNavigate();
   const [result, setResult] = useState<TaxResult | null>(null);
   const [showCAModal, setShowCAModal] = useState(false);
@@ -27,14 +31,22 @@ const Result = () => {
 
   useEffect(() => {
     const stored = sessionStorage.getItem("karsetu_result");
-    if (stored) {
-      try { setResult(JSON.parse(stored)); } catch { setResult(getMockResult()); }
-    } else {
-      setResult(getMockResult());
+    if (!stored) {
+      // Do NOT fall back to mock data — send users with no computation back
+      // to the start. Mock data in a live result page misleads real users.
+      navigate("/compute", { replace: true });
+      return;
     }
-  }, []);
+    try {
+      setResult(JSON.parse(stored));
+    } catch {
+      // Corrupted storage — clear and restart.
+      sessionStorage.removeItem("karsetu_result");
+      navigate("/compute", { replace: true });
+    }
+  }, [navigate]);
 
-  if (!result) return <div className="min-h-screen flex items-center justify-center"><p>Loading...</p></div>;
+  if (!result) return <div className="min-h-screen flex items-center justify-center"><p>Loading…</p></div>;
 
   const defaultComputation = {
     slabs: [], specialRateIncomes: [], taxOnSlabIncome: 0, taxOnSpecialRate: 0,
@@ -42,19 +54,55 @@ const Result = () => {
     grossTaxLiability: 0, section87ARebate: 0, section87AEligible: false,
     netTaxLiability: 0, tdsCredits: [], advanceTaxPaid: 0, netPayableOrRefund: 0,
   };
-  const ad = result.assesseeDetails || { name: "—", pan: "", assessmentYear: "AY 2026-27", governingLaw: "", residency: "", ageCategory: "", aiConfidence: "LOW", confidenceExplanation: "", documentStatuses: [] };
-  const rd = result.regimeDecision || { winner: "NEW" as const, savings: 0, reasons: [], whatWouldFlip: [], isCloseCall: false };
+  const hydrateComputation = (c: any) => ({
+    ...defaultComputation,
+    ...(c || {}),
+    slabs: (c && c.slabs) || [],
+    specialRateIncomes: (c && c.specialRateIncomes) || [],
+    tdsCredits: (c && c.tdsCredits) || [],
+  });
+  const rawAd: any = result.assesseeDetails || {};
+  const ad = {
+    name: rawAd.name || "—",
+    pan: rawAd.pan || "",
+    assessmentYear: rawAd.assessmentYear || "AY 2026-27",
+    governingLaw: rawAd.governingLaw || "",
+    residency: rawAd.residency || "",
+    ageCategory: rawAd.ageCategory || "",
+    aiConfidence: rawAd.aiConfidence || "LOW",
+    confidenceExplanation: rawAd.confidenceExplanation || "",
+    documentStatuses: rawAd.documentStatuses || [],
+  };
+  const rawRd: any = result.regimeDecision || {};
+  const rd = {
+    winner: rawRd.winner || "NEW",
+    savings: rawRd.savings || 0,
+    reasons: rawRd.reasons || [],
+    whatWouldFlip: rawRd.whatWouldFlip || [],
+    isCloseCall: !!rawRd.isCloseCall,
+  };
   const tc = result.taxComputation || { oldRegime: defaultComputation, newRegime: defaultComputation };
-  const oldRegime = tc.oldRegime || defaultComputation;
-  const newRegime = tc.newRegime || defaultComputation;
+  const oldRegime = hydrateComputation(tc.oldRegime);
+  const newRegime = hydrateComputation(tc.newRegime);
   const winnerLabel = rd.winner === "NEW" ? "New Regime" : "Old Regime";
   const loserLabel = rd.winner === "NEW" ? "Old Regime" : "New Regime";
   const winnerTax = rd.winner === "NEW" ? newRegime.netPayableOrRefund : oldRegime.netPayableOrRefund;
   const loserTax = rd.winner === "NEW" ? oldRegime.netPayableOrRefund : newRegime.netPayableOrRefund;
   const assumptions = result.assumptions || [];
-  const incomeHeads = result.incomeHeads || [];
+  const incomeHeads = (result.incomeHeads || []).map((h: any) => ({
+    ...h,
+    lineItems: h.lineItems || [],
+    subSections: h.subSections || undefined,
+  }));
   const gti = result.grossTotalIncome || { oldRegime: 0, newRegime: 0 };
-  const deductions = result.deductions || { oldRegime: [], newRegime: [], totalOld: 0, totalNew: 0, lostInNewRegime: 0 };
+  const rawDed: any = result.deductions || {};
+  const deductions = {
+    oldRegime: rawDed.oldRegime || [],
+    newRegime: rawDed.newRegime || [],
+    totalOld: rawDed.totalOld || 0,
+    totalNew: rawDed.totalNew || 0,
+    lostInNewRegime: rawDed.lostInNewRegime || 0,
+  };
   const taxableIncome = result.taxableIncome || { oldRegime: 0, newRegime: 0 };
   const carryForwardLosses = result.carryForwardLosses || [];
   const flags = result.flags || [];
@@ -390,12 +438,9 @@ const Result = () => {
           </p>
         </section>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 no-print">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 no-print">
           <Button variant="outline" className="flex items-center gap-2" onClick={handlePrint}>
             <Download size={16} /> Download PDF
-          </Button>
-          <Button variant="outline" className="flex items-center gap-2">
-            <FileSpreadsheet size={16} /> Download Excel
           </Button>
           <Button variant="outline" className="flex items-center gap-2" onClick={() => setShowCAModal(true)}>
             <UserCheck size={16} /> Consult a CA

@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, Info, Upload, X, FileText, Lock } from "lucide-react";
+import { Check, Info, Upload, X, FileText, Lock, Loader2, AlertTriangle, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
@@ -14,10 +14,15 @@ import { AssesseeSetup, TaxpayerType, AssessmentYear, ResidencyStatus, AgeCatego
 import { createDocumentSlots, SUGGESTION_CHIPS, AY_OPTIONS } from "@/lib/constants";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 
 const STEPS = ["Setup", "Documents", "Instructions", "Processing"];
 
 const Compute = () => {
+  useDocumentTitle(
+    "Compute your taxes — KarSetu.AI",
+    "Upload documents and compute your Indian income tax under both Old and New Regime. AY 2026-27.",
+  );
   const navigate = useNavigate();
   const { toast } = useToast();
   const [state, setState] = useState<ComputeState>({
@@ -86,22 +91,28 @@ const Compute = () => {
       addLog("done", `Documents received — ${totalFiles} files · ${(totalSize / 1024 / 1024).toFixed(1)} MB total`);
       setState((s) => ({ ...s, progress: 10 }));
 
-      // Convert files to base64
+      // Convert files to base64 in parallel (was sequential — slow for many uploads)
       addLog("working", "Parsing uploaded documents...");
-      const filesData = [];
-      for (const slot of state.documentSlots) {
-        for (const f of slot.files) {
-          const base64 = await new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve((reader.result as string).split(",")[1]);
-            reader.readAsDataURL(f.file);
-          });
-          filesData.push({ name: f.name, type: f.file.type, base64, slotType: f.slotType });
-        }
-      }
+      const readFileAsBase64 = (f: File): Promise<string> =>
+        new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve((reader.result as string).split(",")[1]);
+          reader.onerror = () => reject(reader.error ?? new Error("FileReader failed"));
+          reader.readAsDataURL(f);
+        });
+      const allUploaded = state.documentSlots.flatMap((slot) =>
+        slot.files.map((f) => ({ name: f.name, type: f.file.type, slotType: f.slotType, file: f.file })),
+      );
+      const base64Results = await Promise.all(allUploaded.map((u) => readFileAsBase64(u.file)));
+      const filesData = allUploaded.map((u, i) => ({
+        name: u.name,
+        type: u.type,
+        base64: base64Results[i],
+        slotType: u.slotType,
+      }));
       setState((s) => ({ ...s, progress: 25 }));
 
-      // Call parse-documents
+      // Call parse-documents (Stage 1: OCR + classify)
       let parsedDocs: any[] = [];
       if (filesData.length > 0) {
         const { data: parseResult, error: parseError } = await supabase.functions.invoke("parse-documents", {
@@ -113,20 +124,51 @@ const Compute = () => {
       } else {
         addLog("warning", "No documents uploaded — computation based on instructions only");
       }
-      setState((s) => ({ ...s, progress: 40 }));
+      setState((s) => ({ ...s, progress: 35 }));
 
-      // Call compute-tax with streaming
+      // Stage 2: per-document structured extraction (extract-document)
+      let extractedDocuments: any[] = [];
+      if (parsedDocs.length > 0) {
+        addLog("working", "Extracting structured data from each document...");
+        const extractPayload = {
+          docs: parsedDocs.map((d: any) => ({
+            docType: d.classifiedType || d.docType || "OTHER",
+            extractedText: d.extractedText || "",
+            originalName: d.originalName || d.name || "document",
+          })),
+        };
+        const { data: extractResult, error: extractError } = await supabase.functions.invoke("extract-document", {
+          body: extractPayload,
+        });
+        if (extractError) throw new Error(extractError.message);
+        extractedDocuments = extractResult?.results || [];
+        const okCount = extractedDocuments.filter((r: any) => !r.error).length;
+        addLog("done", `${okCount}/${extractedDocuments.length} documents extracted to JSON`);
+      }
+      setState((s) => ({ ...s, progress: 50 }));
+
+      // Stage 3: compute-tax with streaming
       addLog("working", "Applying tax law under Income Tax Act 1961...");
 
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/compute-tax`, {
+      const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+      const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+      if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        throw new Error(
+          "Supabase environment variables are missing. Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY in your build.",
+        );
+      }
+
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/compute-tax`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          apikey: SUPABASE_ANON_KEY,
         },
         body: JSON.stringify({
           assesseeSetup: state.assesseeSetup,
-          parsedDocuments: parsedDocs,
+          extractedDocuments,
+          parsedDocuments: parsedDocs, // legacy fallback
           userInstructions: state.instructions,
           sessionId: state.sessionId,
         }),
@@ -153,7 +195,8 @@ const Compute = () => {
       let buffer = "";
 
       if (reader) {
-        while (true) {
+        let streamDone = false;
+        while (!streamDone) {
           const { done, value } = await reader.read();
           if (done) break;
           buffer += decoder.decode(value, { stream: true });
@@ -165,7 +208,10 @@ const Compute = () => {
             if (line.endsWith("\r")) line = line.slice(0, -1);
             if (!line.startsWith("data: ")) continue;
             const jsonStr = line.slice(6).trim();
-            if (jsonStr === "[DONE]") break;
+            if (jsonStr === "[DONE]") {
+              streamDone = true;
+              break;
+            }
             try {
               const parsed = JSON.parse(jsonStr);
               if (parsed.type === "log") {
@@ -174,7 +220,11 @@ const Compute = () => {
               } else if (parsed.type === "result") {
                 fullResponse = JSON.stringify(parsed.data);
               }
-            } catch {}
+            } catch (parseErr) {
+              // SSE line failed JSON parse — log to console for debugging rather
+              // than silently swallow.
+              console.warn("compute-tax stream: unparseable SSE line", jsonStr, parseErr);
+            }
           }
         }
       }
@@ -193,10 +243,15 @@ const Compute = () => {
 
       setState((s) => ({ ...s, progress: 100, isProcessing: false, result }));
 
-      // Store in sessionStorage for result page
+      // Store in sessionStorage for result page. If stream closed without a
+      // result payload, surface an explicit error — do NOT route to /result,
+      // which would otherwise show an empty/stale report.
       if (result) {
         sessionStorage.setItem("karsetu_result", JSON.stringify(result));
         sessionStorage.setItem("karsetu_setup", JSON.stringify(state.assesseeSetup));
+      } else {
+        addLog("error", "Computation finished but no result payload was returned. Please retry.");
+        setState((s) => ({ ...s, error: "No result payload returned from compute-tax.", progress: 0 }));
       }
     } catch (err: any) {
       addLog("error", err.message || "An error occurred");
@@ -474,11 +529,11 @@ const Compute = () => {
                     transition={{ delay: 0.1 }}
                     className="flex items-start gap-2 mb-2"
                   >
-                    <span className="text-sm mt-0.5">
-                      {entry.status === "working" && "⏳"}
-                      {entry.status === "done" && "✅"}
-                      {entry.status === "warning" && "⚠️"}
-                      {entry.status === "error" && "❌"}
+                    <span className="mt-0.5 inline-flex" aria-hidden="true">
+                      {entry.status === "working" && <Loader2 size={14} className="text-white/80 animate-spin" />}
+                      {entry.status === "done" && <Check size={14} className="text-green-light" />}
+                      {entry.status === "warning" && <AlertTriangle size={14} className="text-amber" />}
+                      {entry.status === "error" && <XCircle size={14} className="text-kred" />}
                     </span>
                     <span className="font-mono text-sm text-white/90">{entry.message}</span>
                   </motion.div>
@@ -501,7 +556,7 @@ const Compute = () => {
                 </div>
               )}
 
-              {state.progress === 100 && !state.isProcessing && !state.error && (
+              {state.progress === 100 && !state.isProcessing && !state.error && state.result && (
                 <Button
                   onClick={() => navigate("/result")}
                   className="w-full bg-green-light hover:bg-green-mid text-white font-semibold py-6 text-lg"
