@@ -90,11 +90,27 @@
 
 /* Print styles for PDF export */
 @media print {
-  .no-print {
+  /* Hide chrome that shouldn't appear in the printed PDF */
+  .no-print,
+  nav,
+  header nav,
+  footer,
+  [role="navigation"] {
     display: none !important;
   }
-  .print-expand {
+  /* Expand collapsed sections so nothing is hidden in the printout */
+  .print-expand,
+  details {
     max-height: none !important;
     overflow: visible !important;
   }
+  details > summary { list-style: none; }
+  details > *:not(summary) { display: block !important; }
+  /* Safer page breaks */
+  section, article { break-inside: avoid; }
+  h1, h2, h3 { break-after: avoid; }
+  /* Neutralize sticky so the summary bar prints once at top */
+  .sticky { position: static !important; }
+  body { background: #fff !important; }
+  a { color: inherit; text-decoration: none; }
 }
